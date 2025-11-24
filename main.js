@@ -4,17 +4,42 @@ const shaders = {};
 let fallbackShader = "";
 
 async function loadInitialShaders() {
-  // Charger le shader de fallback
-  const response = await fetch("./shaders/fallback.wgsl");
-  fallbackShader = await response.text();
+  try {
+    // === Load fallback shader ===
+    const fallbackResp = await fetch("./shaders/fallback.wgsl");
+    const fallbackShader = await fallbackResp.text();
 
-  const vertexResp = await fetch("./shaders/vertex.wgsl");
-  vertexShader = await vertexResp.text();
+    // === Load vertex shader ===
+    const vertexResp = await fetch("./shaders/vertex.wgsl");
+    const vertexShader = await vertexResp.text();
 
-  const uniformsResp = await fetch("./shaders/uniforms.wgsl");
-  uniformsStruct = await uniformsResp.text();
+    // === Load uniforms struct ===
+    const uniformsResp = await fetch("./shaders/uniforms.wgsl");
+    const uniformsStruct = await uniformsResp.text();
 
-  return { vertexShader, uniformsStruct };
+    // === Load scene struct ===
+    const sceneResp = await fetch("./shaders/scene.wgsl");
+    const sceneStruct = await sceneResp.text();
+
+    // Everything loaded successfully
+    return {
+      fallbackShader,
+      vertexShader,
+      uniformsStruct,
+      sceneStruct
+    };
+
+  } catch (e) {
+    console.warn("Failed to load initial shaders:", e);
+
+    // Return empty fallback values
+    return {
+      fallbackShader: "",
+      vertexShader: "",
+      uniformsStruct: "",
+      sceneStruct: ""
+    };
+  }
 }
 
 async function loadShaders() {
@@ -104,7 +129,7 @@ function initCodeMirror() {
 }
 
 // Variables WebGPU
-let device, context, pipeline, uniformBuffer, bindGroup;
+let device, context, pipeline, uniformBuffer, bindGroup, sceneBuffer;
 let startTime = performance.now();
 let lastFrameTime = startTime;
 let frameCount = 0;
@@ -173,6 +198,18 @@ async function initWebGPU() {
     size: 64,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
+  // NEW: scene buffer (one Sphere = 32 bytes)
+  sceneBuffer = device.createBuffer({
+    size: 32,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  // Initial sphere
+  let sphereData = new Float32Array([
+    0.0, 0.0, 0.0, 1.0,  // pos.xyz + radius
+    1.0, 0.0, 0.0, 0.0   // color.rgb + padding
+  ]);
+
+  device.queue.writeBuffer(sceneBuffer, 0, sphereData);
   return true;
 }
 
@@ -192,8 +229,20 @@ async function compileShader(vertexShader, uniformsStruct, fragmentCode) {
 
     const format = navigator.gpu.getPreferredCanvasFormat();
     const bindGroupLayout = device.createBindGroupLayout({
-      entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type:"uniform" } }],
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: { type: "uniform" }
+          },
+          {
+            binding: 1,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: { type: "uniform" }
+          }
+        ],
     });
+
 
     pipeline = device.createRenderPipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
@@ -204,7 +253,10 @@ async function compileShader(vertexShader, uniformsStruct, fragmentCode) {
 
     bindGroup = device.createBindGroup({
       layout: bindGroupLayout,
-      entries: [{ binding: 0, resource: { buffer: uniformBuffer } }]
+      entries: [
+        { binding: 0, resource: { buffer: uniformBuffer } },
+        { binding: 1, resource: { buffer: sceneBuffer } }
+      ]
     });
 
   } catch(e) {
