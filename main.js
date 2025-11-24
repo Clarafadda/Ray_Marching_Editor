@@ -5,58 +5,18 @@ let fallbackShader = "";
 
 async function loadInitialShaders() {
   // Charger le shader de fallback
-  try {
-    const response = await fetch("./shaders/fallback.wgsl");
-    fallbackShader = await response.text();
-  } catch (e) {
-    console.error("Failed to load fallback shader:", e);
-    fallbackShader = `
-fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
-  let uv = fragCoord.xy / vec2<f32>(800.0, 600.0);
-  return vec4<f32>(uv, 0.5, 1.0);
-}`;
-  }
+  const response = await fetch("./shaders/fallback.wgsl");
+  fallbackShader = await response.text();
 
-  // Charger vertexShader
-  let vertexShader = "";
-  try {
-    const vtxResp = await fetch("./shaders/vertex.wgsl");
-    vertexShader = await vtxResp.text();
-  } catch (e) {
-    console.warn("Vertex shader not loaded, using default");
-    vertexShader = `
-fn vs_main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
-  var pos = array<vec2<f32>, 3>(
-    vec2<f32>(-1.0, -1.0),
-    vec2<f32>(3.0, -1.0),
-    vec2<f32>(-1.0, 3.0)
-  );
-  return vec4<f32>(pos[VertexIndex], 0.0, 1.0);
-}`;
-  }
+  const vertexResp = await fetch("./shaders/vertex.wgsl");
+  vertexShader = await vertexResp.text();
 
-  // Charger uniformsStruct
-  let uniformsStruct = "";
-  try {
-    const uniResp = await fetch("./shaders/uniforms.wgsl");
-    uniformsStruct = await uniResp.text();
-  } catch (e) {
-    console.warn("Uniforms struct not loaded, using default");
-    uniformsStruct = `
-struct Uniforms {
-  resolution: vec2<f32>;
-  time: f32;
-  deltaTime: f32;
-  mousexy: vec2<f32>;
-  mousez: f32;
-  frame: f32;
-};`;
-  }
+  const uniformsResp = await fetch("./shaders/uniforms.wgsl");
+  uniformsStruct = await uniformsResp.text();
 
   return { vertexShader, uniformsStruct };
 }
 
-// Après avoir chargé fallbackShader, vertexShader et uniformsStruct
 async function loadShaders() {
   let manifest = null;
 
