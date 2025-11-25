@@ -5,10 +5,18 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f5ee3ee7-16c5-45cb-b5e7-2f92fe315214" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/shaders/raymarch_scene.wgsl" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/main.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/shaders/raymarch_basic.wgsl" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/raymarch_basic.wgsl" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/fallback.wgsl" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/fallback.wgsl" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/fbm_perlin_noise.wgsl" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/manifest.json" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/manifest.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/mouse.wgsl" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/perlin_noise.wgsl" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/shaders/scene.wgsl" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/scene.wgsl" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/simple_noise.wgsl" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/uniforms.wgsl" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/uniforms.wgsl" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/shaders/vertex.wgsl" beforeDir="false" afterPath="$PROJECT_DIR$/shaders/vertex.wgsl" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

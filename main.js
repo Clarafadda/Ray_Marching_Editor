@@ -3,11 +3,122 @@
 const shaders = {};
 let fallbackShader = "";
 
+// ============================================
+// SCENE CONFIGURATION (NEW)
+// ============================================
+
+const MAX_SPHERES = 5;
+const MAX_BOXES = 3;
+
+const SPHERE_SIZE = 32; // vec3(12) + f32(4) + vec3(12) + padding(4)
+const BOX_SIZE = 48;    // vec3(16) + vec3(16) + vec3(16)
+const SCENE_HEADER_SIZE = 16; // num_spheres(4) + num_boxes(4) + padding(8)
+const SCENE_SIZE = (SPHERE_SIZE * MAX_SPHERES) + (BOX_SIZE * MAX_BOXES) + SCENE_HEADER_SIZE;
+
+const sceneData = {
+    spheres: [
+        { center: [0, 1, 0], radius: 1.0, color: [1.0, 0.3, 0.3] },      // Rouge
+        { center: [2.5, 0.7, 0], radius: 0.7, color: [0.3, 1.0, 0.3] },  // Vert
+        { center: [-2.5, 0.5, 0], radius: 0.5, color: [0.3, 0.3, 1.0] }, // Bleu
+    ],
+    boxes: [
+        { center: [0, -0.5, 0], size: [5, 0.1, 5], color: [0.5, 0.5, 0.5] }, // Sol
+    ],
+    num_spheres: 3,
+    num_boxes: 1,
+};
+
+function createSceneArrayBuffer(data) {
+    const buffer = new ArrayBuffer(SCENE_SIZE);
+    const view = new DataView(buffer);
+    let offset = 0;
+
+    // Écrire toutes les sphères (même vides)
+    for (let i = 0; i < MAX_SPHERES; i++) {
+        if (i < data.num_spheres && data.spheres[i]) {
+            const sphere = data.spheres[i];
+
+            // center: vec3<f32>
+            view.setFloat32(offset + 0, sphere.center[0], true);
+            view.setFloat32(offset + 4, sphere.center[1], true);
+            view.setFloat32(offset + 8, sphere.center[2], true);
+
+            // radius: f32
+            view.setFloat32(offset + 12, sphere.radius, true);
+
+            // color: vec3<f32>
+            view.setFloat32(offset + 16, sphere.color[0], true);
+            view.setFloat32(offset + 20, sphere.color[1], true);
+            view.setFloat32(offset + 24, sphere.color[2], true);
+
+            // padding
+            view.setFloat32(offset + 28, 0, true);
+        } else {
+            for (let j = 0; j < SPHERE_SIZE; j += 4) {
+                view.setFloat32(offset + j, 0, true);
+            }
+        }
+        offset += SPHERE_SIZE;
+    }
+
+    // Écrire toutes les boxes (même vides)
+    for (let i = 0; i < MAX_BOXES; i++) {
+        if (i < data.num_boxes && data.boxes[i]) {
+            const box = data.boxes[i];
+
+            // center: vec3<f32> + padding
+            view.setFloat32(offset + 0, box.center[0], true);
+            view.setFloat32(offset + 4, box.center[1], true);
+            view.setFloat32(offset + 8, box.center[2], true);
+            view.setFloat32(offset + 12, 0, true);
+
+            // size: vec3<f32> + padding
+            view.setFloat32(offset + 16, box.size[0], true);
+            view.setFloat32(offset + 20, box.size[1], true);
+            view.setFloat32(offset + 24, box.size[2], true);
+            view.setFloat32(offset + 28, 0, true);
+
+            // color: vec3<f32> + padding
+            view.setFloat32(offset + 32, box.color[0], true);
+            view.setFloat32(offset + 36, box.color[1], true);
+            view.setFloat32(offset + 40, box.color[2], true);
+            view.setFloat32(offset + 44, 0, true);
+        } else {
+            for (let j = 0; j < BOX_SIZE; j += 4) {
+                view.setFloat32(offset + j, 0, true);
+            }
+        }
+        offset += BOX_SIZE;
+    }
+
+    // Écrire les compteurs
+    view.setUint32(offset + 0, data.num_spheres, true);
+    view.setUint32(offset + 4, data.num_boxes, true);
+    view.setUint32(offset + 8, 0, true); // padding
+    view.setUint32(offset + 12, 0, true); // padding
+
+    return buffer;
+}
+
+function updateScene() {
+    if (device && sceneBuffer) {
+        device.queue.writeBuffer(sceneBuffer, 0, createSceneArrayBuffer(sceneData));
+    }
+}
+
+// Exposer pour la console
+window.sceneData = sceneData;
+window.updateScene = updateScene;
+
+// ============================================
+// SHADER LOADING
+// ============================================
+
 async function loadInitialShaders() {
   try {
     // === Load fallback shader ===
     const fallbackResp = await fetch("./shaders/fallback.wgsl");
-    const fallbackShader = await fallbackResp.text();
+    fallbackShader = await fallbackResp.text();
 
     // === Load vertex shader ===
     const vertexResp = await fetch("./shaders/vertex.wgsl");
@@ -21,7 +132,6 @@ async function loadInitialShaders() {
     const sceneResp = await fetch("./shaders/scene.wgsl");
     const sceneStruct = await sceneResp.text();
 
-    // Everything loaded successfully
     return {
       fallbackShader,
       vertexShader,
@@ -31,8 +141,6 @@ async function loadInitialShaders() {
 
   } catch (e) {
     console.warn("Failed to load initial shaders:", e);
-
-    // Return empty fallback values
     return {
       fallbackShader: "",
       vertexShader: "",
@@ -82,16 +190,18 @@ async function loadShaders() {
   const firstShader = Object.keys(shaders)[0];
   if(firstShader) {
     editor.setValue(shaders[firstShader].content);
-    compileShader(vertexShader, uniformsStruct, shaders[firstShader].content);
+    compileShader(vertexShader, uniformsStruct, sceneStruct, shaders[firstShader].content);
     shaderSelector.value = firstShader;
   } else {
     editor.setValue(fallbackShader);
-    compileShader(vertexShader, uniformsStruct, fallbackShader);
+    compileShader(vertexShader, uniformsStruct, sceneStruct, fallbackShader);
   }
 }
 
+// ============================================
+// CODEMIRROR SETUP
+// ============================================
 
-// Initialisation de CodeMirror
 function initCodeMirror() {
   CodeMirror.defineSimpleMode("wgsl", {
     start: [
@@ -128,7 +238,10 @@ function initCodeMirror() {
   return editor;
 }
 
-// Variables WebGPU
+// ============================================
+// WEBGPU VARIABLES
+// ============================================
+
 let device, context, pipeline, uniformBuffer, bindGroup, sceneBuffer;
 let startTime = performance.now();
 let lastFrameTime = startTime;
@@ -137,7 +250,10 @@ let lastFpsUpdate = startTime;
 let mouseX = 0, mouseY = 0, mouseDown = false;
 let isPanelOpen = true, isFullscreen = false;
 
-// Raccourcis DOM
+// ============================================
+// DOM SHORTCUTS
+// ============================================
+
 const $ = (id) => document.getElementById(id);
 const canvas = $("canvas");
 const errorMsg = $("error-message");
@@ -149,7 +265,10 @@ const canvasContainer = $("canvas-container");
 const editorContainer = $("editor-container");
 const shaderSelector = $("shader-selector");
 
-// Uniforms
+// ============================================
+// UNIFORMS DISPLAY
+// ============================================
+
 const uniforms = {
   resolution: { label: "resolution", initial: "0 × 0", update: (w,h)=>`${w} × ${h}` },
   time: { label: "time", initial: "0.00s", update: (t)=>`${t.toFixed(2)}s` },
@@ -167,7 +286,10 @@ $("uniforms-table").innerHTML = Object.entries(uniforms).map(([key,u])=>
   `<tr class="border-b" style="border-color:#3c3836"><td class="py-1.5 font-semibold" style="color:#fe8019">${u.label}</td><td class="py-1.5 text-right font-mono" id="u-${key}">${u.initial}</td></tr>`
 ).join("");
 
-// Gestion de la souris
+// ============================================
+// MOUSE HANDLING
+// ============================================
+
 canvas.addEventListener("mousemove", e => {
   const rect = canvas.getBoundingClientRect();
   const dpr = devicePixelRatio || 1;
@@ -177,7 +299,10 @@ canvas.addEventListener("mousedown", ()=>mouseDown=true);
 canvas.addEventListener("mouseup", ()=>mouseDown=false);
 canvas.addEventListener("mouseleave", ()=>mouseDown=false);
 
-// Toggle panel
+// ============================================
+// PANEL TOGGLE
+// ============================================
+
 $("panel-toggle").onclick = () => {
   isPanelOpen = !isPanelOpen;
   $("uniforms-panel").style.width = isPanelOpen ? "250px" : "24px";
@@ -185,7 +310,10 @@ $("panel-toggle").onclick = () => {
   $("toggle-arrow").textContent = isPanelOpen ? "▶" : "◀";
 };
 
-// WebGPU init
+// ============================================
+// WEBGPU INIT
+// ============================================
+
 async function initWebGPU() {
   if(!navigator.gpu) return (errorMsg.textContent="WebGPU not supported", false);
   const adapter = await navigator.gpu.requestAdapter();
@@ -194,40 +322,55 @@ async function initWebGPU() {
   context = canvas.getContext("webgpu");
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({ device, format });
+
+  // Buffer uniforms par défaut
   uniformBuffer = device.createBuffer({
     size: 64,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
-  // NEW: scene buffer (one Sphere = 32 bytes)
-  sceneBuffer = device.createBuffer({
-    size: 32,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  });
-  // Initial sphere
-  let sphereData = new Float32Array([
-    0.0, 0.0, 0.0, 1.0,  // pos.xyz + radius
-    1.0, 0.0, 0.0, 0.0   // color.rgb + padding
-  ]);
 
-  device.queue.writeBuffer(sceneBuffer, 0, sphereData);
+  // Buffer de scène (STORAGE BUFFER pour arrays)
+  sceneBuffer = device.createBuffer({
+    size: SCENE_SIZE,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  });
+
+  // Initialiser le buffer de scène
+  device.queue.writeBuffer(sceneBuffer, 0, createSceneArrayBuffer(sceneData));
+
   return true;
 }
 
-// Compile shader
-async function compileShader(vertexShader, uniformsStruct, fragmentCode) {
+// ============================================
+// COMPILE SHADER
+// ============================================
+
+async function compileShader(vertexShader, uniformsStruct, sceneStruct, fragmentCode) {
+  const start = performance.now();
   try {
     errorMsg.classList.add("hidden");
-    const code = vertexShader + "\n" + uniformsStruct + "\n" + fragmentCode;
+
+    // Combiner tous les shaders
+    const code = vertexShader + "\n" + uniformsStruct + "\n" + sceneStruct + "\n" + fragmentCode;
+
     const shaderModule = device.createShaderModule({ code });
     const info = await shaderModule.getCompilationInfo();
-    const lineOffset = (vertexShader + "\n" + uniformsStruct).split("\n").length;
+    const lineOffset = (vertexShader + "\n" + uniformsStruct + "\n" + sceneStruct).split("\n").length;
+
     const errors = info.messages.filter(m=>m.type==="error").map(m=>{
       const fragLine = m.lineNum - lineOffset;
       return fragLine>0? `Line ${fragLine}: ${m.message}` : `Line ${m.lineNum}: ${m.message}`;
     }).join("\n");
-    if(errors) return (errorMsg.textContent="Shader error:\n"+errors,errorMsg.classList.remove("hidden"));
+
+    if(errors) {
+      errorMsg.textContent="Shader error:\n"+errors;
+      errorMsg.classList.remove("hidden");
+      return;
+    }
 
     const format = navigator.gpu.getPreferredCanvasFormat();
+
+    // Bind group layout avec 2 bindings
     const bindGroupLayout = device.createBindGroupLayout({
         entries: [
           {
@@ -238,11 +381,10 @@ async function compileShader(vertexShader, uniformsStruct, fragmentCode) {
           {
             binding: 1,
             visibility: GPUShaderStage.FRAGMENT,
-            buffer: { type: "uniform" }
+            buffer: { type: "read-only-storage" } // STORAGE pour arrays
           }
         ],
     });
-
 
     pipeline = device.createRenderPipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
@@ -259,22 +401,34 @@ async function compileShader(vertexShader, uniformsStruct, fragmentCode) {
       ]
     });
 
+    $("compile-time").textContent = `${(performance.now() - start).toFixed(2)}ms`;
+
   } catch(e) {
     errorMsg.textContent = "Compile error: "+e.message;
     errorMsg.classList.remove("hidden");
   }
 }
 
-// Render loop
+// ============================================
+// RENDER LOOP
+// ============================================
+
 function render() {
   if(!pipeline) return;
   const currentTime = performance.now();
   const deltaTime = (currentTime-lastFrameTime)/1000;
   const elapsedTime = (currentTime-startTime)/1000;
 
-  const data = [canvas.width, canvas.height, elapsedTime, deltaTime, mouseX, mouseY, mouseDown?1:0,0, frameCount,0,0,0];
-  device.queue.writeBuffer(uniformBuffer,0,new Float32Array(data));
+  // Mise à jour des uniforms par défaut
+  const data = [
+    canvas.width, canvas.height,
+    elapsedTime, deltaTime,
+    mouseX, mouseY, mouseDown?1:0, 0,
+    frameCount, 0, 0, 0
+  ];
+  device.queue.writeBuffer(uniformBuffer, 0, new Float32Array(data));
 
+  // Mise à jour de l'affichage des uniforms
   $("u-resolution").textContent = uniforms.resolution.update(canvas.width,canvas.height);
   $("u-time").textContent = uniforms.time.update(elapsedTime);
   $("u-deltaTime").textContent = uniforms.deltaTime.update(deltaTime);
@@ -284,30 +438,38 @@ function render() {
 
   lastFrameTime = currentTime;
 
+  // Render pass
   const encoder = device.createCommandEncoder();
   const pass = encoder.beginRenderPass({
     colorAttachments:[{
       view: context.getCurrentTexture().createView(),
-      loadOp:"clear", clearValue:{r:0,g:0,b:0,a:1}, storeOp:"store"
+      loadOp:"clear",
+      clearValue:{r:0,g:0,b:0,a:1},
+      storeOp:"store"
     }]
   });
   pass.setPipeline(pipeline);
-  pass.setBindGroup(0,bindGroup);
+  pass.setBindGroup(0, bindGroup);
   pass.draw(3);
   pass.end();
   device.queue.submit([encoder.finish()]);
 
+  // FPS counter
   if(++frameCount && currentTime-lastFpsUpdate>100) {
     const fps = Math.round(frameCount/((currentTime-lastFpsUpdate)/1000));
     $("fps").textContent = fps;
     $("frame-time").textContent = `${((currentTime-lastFpsUpdate)/frameCount).toFixed(1)}ms`;
-    frameCount=0; lastFpsUpdate=currentTime;
+    frameCount=0;
+    lastFpsUpdate=currentTime;
   }
 
   requestAnimationFrame(render);
 }
 
-// Resize canvas
+// ============================================
+// CANVAS RESIZE
+// ============================================
+
 function resizeCanvas() {
   const dpr = devicePixelRatio||1;
   canvas.width = canvasContainer.clientWidth*dpr;
@@ -316,24 +478,50 @@ function resizeCanvas() {
   canvas.style.height = canvasContainer.clientHeight+"px";
 }
 
-// Shader selection
+window.addEventListener("resize", resizeCanvas);
+
+// ============================================
+// SHADER SELECTION
+// ============================================
+
 shaderSelector.addEventListener("change", e=>{
   const selected = e.target.value;
   if(selected && shaders[selected]) {
     editor.setValue(shaders[selected].content);
-    compileShader(vertexShader, uniformsStruct, shaders[selected].content);
+    compileShader(vertexShader, uniformsStruct, sceneStruct, shaders[selected].content);
   }
 });
 
-// Main
-let editor, vertexShader, uniformsStruct;
+// Compile button
+compileBtn.onclick = () => {
+  compileShader(vertexShader, uniformsStruct, sceneStruct, editor.getValue());
+};
+
+// ============================================
+// MAIN INITIALIZATION
+// ============================================
+
+let editor, vertexShader, uniformsStruct, sceneStruct;
 
 (async () => {
-  ({ vertexShader, uniformsStruct } = await loadInitialShaders());
+  // Charger les shaders de base
+  ({ vertexShader, uniformsStruct, sceneStruct, fallbackShader } = await loadInitialShaders());
+
+  // Initialiser l'éditeur
   editor = initCodeMirror();
+
+  // Setup canvas
   resizeCanvas();
-  await initWebGPU();
-  await compileShader(vertexShader, uniformsStruct, fallbackShader);
-  await loadShaders();
-  render();
+
+  // Initialiser WebGPU
+  if (await initWebGPU()) {
+    // Compiler le shader initial
+    await compileShader(vertexShader, uniformsStruct, sceneStruct, fallbackShader);
+
+    // Charger la liste des shaders
+    await loadShaders();
+
+    // Démarrer le rendu
+    render();
+  }
 })();
