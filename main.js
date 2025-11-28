@@ -1,7 +1,6 @@
 // main.js
 
-const shaders = {};
-let fallbackShader = "";
+//let fallbackShader = "";
 
 // ============================================
 // SCENE CONFIGURATION (NEW)
@@ -150,49 +149,21 @@ async function loadInitialShaders() {
   }
 }
 
-async function loadShaders() {
-  let manifest = null;
-
+async function loadMainShader() {
   try {
-    const manifestResp = await fetch("./shaders/manifest.json");
-    if (manifestResp.ok) manifest = await manifestResp.json();
-  } catch(e) { console.warn("No manifest found"); }
-
-  const shaderList = manifest?.shaders || [
-    { file: "mouse.wgsl", name: "Mouse Interaction" }
-  ];
-
-  for(const shaderInfo of shaderList) {
-    try {
-      const response = await fetch(`./shaders/${shaderInfo.file}`);
-      if(response.ok) {
-        const content = await response.text();
-        shaders[shaderInfo.file] = {
-          content,
-          name: shaderInfo.name || shaderInfo.file.replace(".wgsl",""),
-          description: shaderInfo.description || ""
-        };
-      }
-    } catch(e) { console.error(`Failed to load shader ${shaderInfo.file}`, e); }
-  }
-
-  // Mettre à jour le select
-  while(shaderSelector.options.length>1) shaderSelector.remove(1);
-  Object.keys(shaders).forEach(file => {
-    const option = document.createElement("option");
-    option.value = file;
-    option.textContent = shaders[file].name;
-    if(shaders[file].description) option.title = shaders[file].description;
-    shaderSelector.appendChild(option);
-  });
-
-  // Choisir le premier shader ou fallback
-  const firstShader = Object.keys(shaders)[0];
-  if(firstShader) {
-    editor.setValue(shaders[firstShader].content);
-    compileShader(vertexShader, uniformsStruct, sceneStruct, shaders[firstShader].content);
-    shaderSelector.value = firstShader;
-  } else {
+    const response = await fetch("./shaders/raymarch_scene.wgsl");
+    if (response.ok) {
+      const mainShader = await response.text();
+      editor.setValue(mainShader);
+      compileShader(vertexShader, uniformsStruct, sceneStruct, mainShader);
+      console.log("Loaded raymarch_scene.wgsl");
+    } else {
+      console.warn("Failed to load raymarch_scene.wgsl, using fallback");
+      editor.setValue(fallbackShader);
+      compileShader(vertexShader, uniformsStruct, sceneStruct, fallbackShader);
+    }
+  } catch(e) {
+    console.error("Error loading main shader:", e);
     editor.setValue(fallbackShader);
     compileShader(vertexShader, uniformsStruct, sceneStruct, fallbackShader);
   }
@@ -263,7 +234,6 @@ const fullscreenEnterIcon = $("fullscreen-enter-icon");
 const fullscreenExitIcon = $("fullscreen-exit-icon");
 const canvasContainer = $("canvas-container");
 const editorContainer = $("editor-container");
-const shaderSelector = $("shader-selector");
 
 // ============================================
 // UNIFORMS DISPLAY
@@ -480,28 +450,93 @@ function resizeCanvas() {
 
 window.addEventListener("resize", resizeCanvas);
 
-// ============================================
-// SHADER SELECTION
-// ============================================
-
-shaderSelector.addEventListener("change", e=>{
-  const selected = e.target.value;
-  if(selected && shaders[selected]) {
-    editor.setValue(shaders[selected].content);
-    compileShader(vertexShader, uniformsStruct, sceneStruct, shaders[selected].content);
-  }
-});
 
 // Compile button
 compileBtn.onclick = () => {
   compileShader(vertexShader, uniformsStruct, sceneStruct, editor.getValue());
 };
 
+// Keyboard shortcut: Ctrl/Cmd + Enter to compile
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    compileShader(vertexShader, uniformsStruct, sceneStruct, editor.getValue());
+  }
+});
+
+// ============================================
+// FULLSCREEN HANDLING
+// ============================================
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement && !document.webkitFullscreenElement &&
+      !document.mozFullScreenElement && !document.msFullscreenElement) {
+    const elem = canvasContainer;
+    if (elem.requestFullscreen) {
+      elem.requestFullscreen();
+    } else if (elem.webkitRequestFullscreen) {
+      elem.webkitRequestFullscreen();
+    } else if (elem.mozRequestFullScreen) {
+      elem.mozRequestFullScreen();
+    } else if (elem.msRequestFullscreen) {
+      elem.msRequestFullscreen();
+    }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    } else if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    }
+  }
+}
+
+function updateFullscreenUI() {
+  const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement ||
+                            document.mozFullScreenElement || document.msFullscreenElement;
+
+  isFullscreen = !!fullscreenElement;
+  if (isFullscreen) {
+    fullscreenEnterIcon.classList.add("hidden");
+    fullscreenExitIcon.classList.remove("hidden");
+    editorContainer.style.display = "none";
+    canvasContainer.classList.remove("landscape:w-1/2", "portrait:h-1/2");
+    canvasContainer.classList.add("w-full", "h-full");
+  } else {
+    fullscreenEnterIcon.classList.remove("hidden");
+    fullscreenExitIcon.classList.add("hidden");
+    editorContainer.style.display = "";
+    canvasContainer.classList.remove("w-full", "h-full");
+    canvasContainer.classList.add("landscape:w-1/2", "portrait:h-1/2");
+  }
+
+  setTimeout(resizeCanvas, 50);
+}
+
+fullscreenBtn.onclick = toggleFullscreen;
+document.addEventListener("fullscreenchange", updateFullscreenUI);
+document.addEventListener("webkitfullscreenchange", updateFullscreenUI);
+document.addEventListener("mozfullscreenchange", updateFullscreenUI);
+document.addEventListener("MSFullscreenChange", updateFullscreenUI);
+
+// Keyboard shortcut: F to toggle fullscreen
+document.addEventListener("keydown", (e) => {
+  if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+    if (document.activeElement !== editor.getInputField()) {
+      e.preventDefault();
+      toggleFullscreen();
+    }
+  }
+});
+
 // ============================================
 // MAIN INITIALIZATION
 // ============================================
 
-let editor, vertexShader, uniformsStruct, sceneStruct;
+let editor, vertexShader, uniformsStruct, sceneStruct, fallbackShader;
 
 (async () => {
   // Charger les shaders de base
@@ -515,11 +550,8 @@ let editor, vertexShader, uniformsStruct, sceneStruct;
 
   // Initialiser WebGPU
   if (await initWebGPU()) {
-    // Compiler le shader initial
-    await compileShader(vertexShader, uniformsStruct, sceneStruct, fallbackShader);
-
-    // Charger la liste des shaders
-    await loadShaders();
+    // Charger et compiler le shader principal
+    await loadMainShader();
 
     // Démarrer le rendu
     render();
