@@ -72,6 +72,10 @@
         flex: 1;
         min-height: 0;
       }
+
+      /* Selected row visuals */
+      #scene-objects-list > div.row.selected { outline: 1px solid rgba(255,255,255,0.08); background: #242424; }
+
     </style>
   </head>
   <body class="font-mono bg-gray-900 text-white overflow-hidden select-none">
@@ -111,6 +115,8 @@
             </div>
             <div class="flex items-center gap-3">
                  <span class="text-xs font-normal whitespace-nowrap hidden sm:inline-block"><span style="opacity: 0.5">FPS:</span> <span id="fps">0</span></span>
+                 <span class="text-xs font-normal whitespace-nowrap hidden sm:inline-block"><span style="opacity: 0.5">FT:</span> <span id="frame-time">0.0ms</span></span>
+                 <span id="compile-time" class="text-xs text-gray-400 hidden"></span>
                  <button id="compile-btn" class="px-3 py-1 text-xs rounded bg-[#458588] hover:bg-[#83a598] text-[#1d2021] font-bold transition-colors">
                   Update Shader
                 </button>
@@ -149,8 +155,28 @@
               <!-- Controls Container -->
               <div class="flex-1 overflow-y-auto p-2 space-y-4">
 
-                <div class="p-2 bg-[#1d2021] rounded text-[10px] text-gray-400 mb-2">
-                    Editing: Sphere [0] (Red)
+                <div id="editor-active-info" class="p-2 bg-[#1d2021] rounded text-[10px] text-gray-400 mb-2">
+                    Editing: none
+                </div>
+
+                <div class="flex gap-2">
+                  <button onclick="addSphere()" class="flex-1 px-3 py-2 text-xs bg-[#458588] hover:bg-[#83a598] text-[#1d2021] font-bold rounded transition-colors flex items-center justify-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                    </svg>
+                    Sphere
+                  </button>
+                  <button onclick="addBox()" class="flex-1 px-3 py-2 text-xs bg-[#d65d0e] hover:bg-[#fe8019] text-[#1d2021] font-bold rounded transition-colors flex items-center justify-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    </svg>
+                    Box
+                  </button>
+                </div>
+
+                <!-- Scene Objects List -->
+                <div id="scene-objects-list" class="space-y-2">
+                  <!-- Dynamically populated -->
                 </div>
 
                 <!-- Component: Transform -->
@@ -201,7 +227,9 @@
                 <div class="control-group">
                     <div class="text-[11px] font-bold text-[#ebdbb2] mb-2 pl-1 border-l-2 border-[#458588]">STATS</div>
                     <table class="w-full text-xs" style="color: #ebdbb2">
-                      <tbody id="uniforms-table"></tbody>
+                      <tbody id="uniforms-table">
+                        <!-- We'll create rows here programmatically with stable ids -->
+                      </tbody>
                     </table>
                 </div>
 
@@ -211,6 +239,7 @@
         </div>
       </div>
     </div>
-    <script src="main.js" type="module"></script>
+
+    <script type="module" src="main.js"></script>
   </body>
 </html>
