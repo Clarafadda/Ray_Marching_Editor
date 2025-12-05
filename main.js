@@ -1,7 +1,7 @@
 // main.js
 // Module entry - option A: Scene Editor + CodeMirror + WebGPU + shader loader
 // Defensive and corrected to avoid null.textContent errors
-
+//compilation update
 // --------------------------------------------
 // CONFIG
 // --------------------------------------------
