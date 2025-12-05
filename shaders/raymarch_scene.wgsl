@@ -1,4 +1,13 @@
 // ============================================
+// CONSTANTS
+// ============================================
+
+const MAX_DIST: f32 = 100.0;
+const SURF_DIST: f32 = 0.001;
+const MAX_STEPS: i32 = 256;
+const MAT_SKY_COLOR: vec3<f32> = vec3<f32>(0.5, 0.7, 1.0);
+
+// ============================================
 // SIGNED DISTANCE FUNCTIONS
 // ============================================
 
@@ -10,6 +19,38 @@ fn sdBox(p: vec3<f32>, center: vec3<f32>, size: vec3<f32>) -> f32 {
     let q = abs(p - center) - size;
     return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
+
+fn sdTorus(p: vec3<f32>, t: vec2<f32>) -> f32 {
+  let q = vec2<f32>(length(p.xz) - t.x, p.y);
+  return length(q) - t.y;
+}
+
+fn sdPlane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
+  return dot(p, n) + h;
+}
+
+// ============================================
+// SDF Operations
+// ============================================
+
+/*
+fn op_union(d1: f32, d2: f32) -> f32 {
+  return min(d1, d2);
+}
+
+fn op_subtract(d1: f32, d2: f32) -> f32 {
+  return max(-d1, d2);
+}
+
+fn op_intersect(d1: f32, d2: f32) -> f32 {
+  return max(d1, d2);
+}
+
+fn op_smooth_union(d1: f32, d2: f32, k: f32) -> f32 {
+  let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
+  return mix(d2, d1, h) - k * h * (1.0 - h);
+}
+*/
 
 // ============================================
 // SCENE SDF
@@ -46,8 +87,8 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
 // MATERIAL COLOR
 // ============================================
 
-fn getMaterialColor(matID: f32) -> vec3<f32> {
-    // Sphères (ID < 100)
+fn getMaterialColor(matID: f32, p: vec3<f32>) -> vec3<f32> {
+    // Spheres (ID < 100)
     if (matID < 100.0) {
         let i = u32(matID);
         if (i < scene.num_spheres) {
@@ -61,15 +102,16 @@ fn getMaterialColor(matID: f32) -> vec3<f32> {
             return scene.boxes[i].color;
         }
     }
-    return vec3<f32>(1.0, 1.0, 1.0);
+    return vec3<f32>(0.5, 0.5, 0.5);
 }
 
 // ============================================
 // NORMAL CALCULATION
 // ============================================
 
-fn calcNormal(p: vec3<f32>) -> vec3<f32> {
-    let eps = 0.0001;
+// Calculate normal using gradient
+fn get_normal(p: vec3<f32>) -> vec3<f32> {
+    let eps = 0.001;
     let h = vec2<f32>(eps, 0.0);
     return normalize(vec3<f32>(
         sceneSDF(p + h.xyy).x - sceneSDF(p - h.xyy).x,
@@ -82,7 +124,7 @@ fn calcNormal(p: vec3<f32>) -> vec3<f32> {
 // RAY MARCHING
 // ============================================
 
-fn rayMarch(ro: vec3<f32>, rd: vec3<f32>) -> vec2<f32> {
+fn ray_march(ro: vec3<f32>, rd: vec3<f32>) -> vec2<f32> {
     var t = 0.0;
     var matID = -1.0;
 
@@ -98,7 +140,7 @@ fn rayMarch(ro: vec3<f32>, rd: vec3<f32>) -> vec2<f32> {
 
         t += d;
 
-        if (t > 100.0) {
+        if (t > MAX_DIST) {
             break;
         }
     }
@@ -122,10 +164,10 @@ fn getCamera(uv: vec2<f32>, eye: vec3<f32>, lookAt: vec3<f32>) -> vec3<f32> {
 // ============================================
 
 fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
-    let normal = calcNormal(p);
+    let normal = get_normal(p);
     let lightDir = normalize(vec3<f32>(1.0, 1.0, 1.0));
 
-    let baseColor = getMaterialColor(matID);
+    let baseColor = getMaterialColor(matID, p);
 
     // Diffuse
     let diffuse = max(dot(normal, lightDir), 0.0);
@@ -143,42 +185,67 @@ fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
 // ============================================
 // FRAGMENT SHADER
 // ============================================
-
 @fragment
 fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
-    // Coordonnées UV normalisées [-1, 1]
-    let uv = (fragCoord.xy - uniforms.resolution * 0.5) / uniforms.resolution.y;
+  let uv = (fragCoord.xy - uniforms.resolution * 0.5) / min(uniforms.resolution.x, uniforms.resolution.y);
 
-    // Position de la caméra (orbite)
-    let camDist = 8.0;
-    let camAngle = uniforms.time * 0.3;
-    let eye = vec3<f32>(
-        cos(camAngle) * camDist,
-        2.0,
-        sin(camAngle) * camDist
-    );
-    let lookAt = vec3<f32>(0.0, 0.0, 0.0);
 
-    // Direction du rayon
-    let rd = getCamera(uv, eye, lookAt);
+  let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y), 0.05, 1.5);
+  let yaw = uniforms.time * 0.5; // Auto-orbits around the center
 
-    // Ray marching
-    let result = rayMarch(eye, rd);
-    let t = result.x;
-    let matID = result.y;
+  // Camera Coords
+  let cam_dist = 4.0; // Distance from the target
+  let cam_target = vec3<f32>(0.0, 0.0, 0.0);
+  let cam_pos = vec3<f32>(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * cam_dist;
 
-    var color = vec3<f32>(0.0);
+  // Camera Matrix
+  let cam_forward = normalize(cam_target - cam_pos);
+  let cam_right = normalize(cross(cam_forward, vec3<f32>(0.0, 1.0, 0.0)));
+  let cam_up = cross(cam_right, cam_forward); // Re-orthogonalized up
 
-    if (matID >= 0.0) {
-        let p = eye + rd * t;
-        color = shade(p, rd, matID);
-    } else {
-        // Fond dégradé
-        color = vec3<f32>(0.1, 0.1, 0.15) * (1.0 - uv.y * 0.5);
-    }
+  // Ray Direction
+  // 1.5 is the "focal length" or distance to the projection plane
+  let focal_length = 1.5;
+  let rd = normalize(cam_right * uv.x - cam_up * uv.y + cam_forward * focal_length);
 
-    // Gamma correction
-    color = pow(color, vec3<f32>(1.0 / 2.2));
+  // Ray march
+  let result = ray_march(cam_pos, rd);
 
-    return vec4<f32>(color, 1.0);
+  if (result.x < MAX_DIST) {
+    // Hit something - calculate lighting
+    let hit_pos = cam_pos + rd * result.x;
+    let normal = get_normal(hit_pos);
+
+    // Diffuse Lighting
+    let light_pos = vec3<f32>(2.0, 5.0, -1.0);
+    let light_dir = normalize(light_pos - hit_pos);
+    let diffuse = max(dot(normal, light_dir), 0.0);
+
+    // Shadow Casting
+    let shadow_origin = hit_pos + normal * 0.01;
+    let shadow_result = ray_march(shadow_origin, light_dir);
+    let shadow = select(0.3, 1.0, shadow_result.x > length(light_pos - shadow_origin));
+
+    // Phong Shading
+    let ambient = 0.2;
+    var albedo = getMaterialColor(result.y, hit_pos);
+    let phong = albedo * (ambient + diffuse * shadow * 0.8);
+
+    // Exponential Fog
+    let fog = exp(-result.x * 0.02);
+    let color = mix(MAT_SKY_COLOR, phong, fog);
+
+    return vec4<f32>(gamma_correct(color), 1.0);
+  }
+
+  // Sky gradient
+  let sky = mix(MAT_SKY_COLOR, MAT_SKY_COLOR * 0.9, uv.y * 0.5 + 0.5);
+  return vec4<f32>(gamma_correct(sky), 1.0);
 }
+
+
+// Gamma Correction
+fn gamma_correct(color: vec3<f32>) -> vec3<f32> {
+  return pow(color, vec3<f32>(1.0 / 2.2));
+}
+

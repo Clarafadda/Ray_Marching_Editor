@@ -7,11 +7,13 @@
 // --------------------------------------------
 const MAX_SPHERES = 5;
 const MAX_BOXES = 3;
+const MAX_TORUS=3;
 
 const SPHERE_SIZE = 32;
 const BOX_SIZE = 48;
+const TORUS_SIZE=48
 const SCENE_HEADER_SIZE = 16;
-const SCENE_SIZE = (SPHERE_SIZE * MAX_SPHERES) + (BOX_SIZE * MAX_BOXES) + SCENE_HEADER_SIZE;
+const SCENE_SIZE = (SPHERE_SIZE * MAX_SPHERES) + (BOX_SIZE * MAX_BOXES) + (TORUS_SIZE * MAX_TORUS) + SCENE_HEADER_SIZE;
 
 // --------------------------------------------
 // SCENE DATA BUFFER
@@ -19,8 +21,10 @@ const SCENE_SIZE = (SPHERE_SIZE * MAX_SPHERES) + (BOX_SIZE * MAX_BOXES) + SCENE_
 const sceneData = {
   spheres: [],
   boxes: [],
+  torus: [],
   num_spheres: 0,
-  num_boxes: 0
+  num_boxes: 0,
+  num_torus: 0
 };
 
 function createSceneArrayBuffer(data) {
@@ -68,11 +72,37 @@ function createSceneArrayBuffer(data) {
     offset += BOX_SIZE;
   }
 
+  // torus
+  for (let i =0; i< MAX_TORUS; i++){
+    if (i < data.num_torus && data.torus[i]){
+        const t = data.torus[i];
+        view.setFloat32(offset + 0, t.center[0], true);
+        view.setFloat32(offset + 4, t.center[1], true);
+        view.setFloat32(offset + 8, t.center[2], true);
+        view.setFloat32(offset + 12, 0, true); // padding
+        view.setFloat32(offset + 16, t.majorRadius, true);
+        view.setFloat32(offset + 20, t.minorRadius, true);
+        view.setFloat32(offset + 24, 0, true); // padding
+        view.setFloat32(offset + 28, 0, true); // padding
+        view.setFloat32(offset + 32, t.color[0], true);
+        view.setFloat32(offset + 36, t.color[1], true);
+        view.setFloat32(offset + 40, t.color[2], true);
+        view.setFloat32(offset + 44, 0, true); // padding
+    } else {
+      for (let j = 0; j < TORUS_SIZE; j += 4) view.setFloat32(offset + j, 0, true);
+    }
+    offset += TORUS_SIZE;
+  }
+
+
+
   // header: num_spheres, num_boxes, pad
   view.setUint32(offset + 0, data.num_spheres, true);
   view.setUint32(offset + 4, data.num_boxes, true);
-  view.setUint32(offset + 8, 0, true);
+  view.setUint32(offset + 8, data.num_torus, true);
+
   view.setUint32(offset + 12, 0, true);
+  //view.setUint32(offset + 16, 0, true);
 
   return buffer;
 }
@@ -166,10 +196,40 @@ function removeBox(index) {
     console.log(`Removed box ${index}`);
   }
 }
+
+function addTorus(){
+if (sceneData.num_torus >= MAX_TORUS) {
+    alert(`Maximum ${MAX_TORUS} torus reached!`);
+    return;
+  }
+  sceneData.torus.push({
+    center: [0, 1, 0],
+    minorRadius: 0.5,
+    majorRadius: 1.5,
+    color: [Math.random(), Math.random(), Math.random()]
+  });
+  sceneData.num_torus++;
+  updateScene();
+  updateSceneUI();
+  console.log(`✅ Added Torus ${sceneData.num_torus - 1}`);
+}
+
+function removeTorus(index) {
+  if (index >= 0 && index < sceneData.num_torus) {
+    sceneData.torus.splice(index, 1);
+    sceneData.num_torus--;
+    updateScene();
+    updateSceneUI();
+    console.log(`Removed torus ${index}`);
+  }
+}
+
 window.addSphere = addSphere;
 window.addBox = addBox;
+window.addTorus = addTorus;
 window.removeSphere = removeSphere;
 window.removeBox = removeBox;
+window.removeTorus = removeTorus
 
 // --------------------------------------------
 // CODEMIRROR (simple mode for wgsl)
@@ -474,6 +534,17 @@ function updateSceneUI() {
     </div>`);
   }
 
+  // torus
+  for (let i = 0; i < sceneData.num_torus; i++) {
+    const t = sceneData.torus[i];
+    const hex = rgbToHex(t.color);
+    parts.push(`<div class="flex items-center gap-2 p-2 bg-[#1d2021] rounded hover:bg-[#32302f] transition-colors row" data-type="torus" data-index="${i}">
+      <div class="w-3 h-3" style="background: ${hex}"></div>
+      <span class="text-xs flex-1">Torus ${i}</span>
+      <button data-remove="torus-${i}" class="text-xs text-red-400 hover:text-red-300">✕</button>
+    </div>`);
+  }
+
   if (parts.length === 0) {
     container.innerHTML = `<div class="text-xs text-gray-500 text-center py-4">No objects in scene<br>Click to add</div>`;
   } else {
@@ -500,6 +571,9 @@ function updateSceneUI() {
         } else if (removeKey.startsWith('box-')) {
           const i = Number(removeKey.split('-')[1]);
           removeBox(i);
+        }else if (removeKey.startsWith('torus-')) {
+          const i = Number(removeKey.split('-')[1]);
+          removeTorus(i);
         }
         selectObject('none', -1);
       };
@@ -510,6 +584,7 @@ function updateSceneUI() {
   if (selected.type === 'none') {
     if (sceneData.num_spheres > 0) selectObject('sphere', 0);
     else if (sceneData.num_boxes > 0) selectObject('box', 0);
+    else if (sceneData.num_torus > 0) selectObject('torus', 0);
   }
 }
 
@@ -524,6 +599,7 @@ function selectObject(type, index) {
   if (sel) sel.classList.add("selected");
 
   const info = $("editor-active-info");
+
   if (type === 'sphere') {
     const s = sceneData.spheres[index];
     if (!s) { if (info) info.textContent = 'Editing: none'; return; }
@@ -532,6 +608,8 @@ function selectObject(type, index) {
     $("val-pos-x").textContent = Number(s.center[0]).toFixed(1);
     $("input-pos-y").value = s.center[1];
     $("val-pos-y").textContent = Number(s.center[1]).toFixed(1);
+    //$("input-pos-z").value = s.center[2];
+    //$("val-pos-z").textContent = Number(s.center[2]).toFixed(1);
     $("input-radius").value = s.radius;
     $("val-radius").textContent = Number(s.radius).toFixed(1);
     $("input-color").value = rgbToHex(s.color);
@@ -543,13 +621,29 @@ function selectObject(type, index) {
     $("val-pos-x").textContent = Number(b.center[0]).toFixed(1);
     $("input-pos-y").value = b.center[1];
     $("val-pos-y").textContent = Number(b.center[1]).toFixed(1);
+    //$("input-pos-z").value = b.center[2];
+    //$("val-pos-z").textContent = Number(b.center[2]).toFixed(1);
     $("input-radius").value = b.size[0];
     $("val-radius").textContent = Number(b.size[0]).toFixed(1);
     $("input-color").value = rgbToHex(b.color);
+  } else if (type === 'torus') {
+    const t = sceneData.torus[index];
+    if (!t) { if (info) info.textContent = 'Editing: none'; return; }
+    if (info) info.textContent = `Editing: Torus [${index}]`;
+    $("input-pos-x").value = t.center[0];
+    $("val-pos-x").textContent = Number(t.center[0]).toFixed(1);
+    $("input-pos-y").value = t.center[1];
+    $("val-pos-y").textContent = Number(t.center[1]).toFixed(1);
+    //$("input-pos-z").value = t.center[2];
+    //$("val-pos-z").textContent = Number(t.center[2]).toFixed(1);
+    $("input-radius").value = t.majorRadius;
+    $("val-radius").textContent = Number(t.majorRadius).toFixed(1);
+    $("input-color").value = rgbToHex(t.color);
   } else {
     if (info) info.textContent = 'Editing: none';
     $("input-pos-x").value = 0; $("val-pos-x").textContent = "0.0";
     $("input-pos-y").value = 0; $("val-pos-y").textContent = "0.0";
+    //$("input-pos-z").value = 0; $("val-pos-z").textContent = "0.0";
     $("input-radius").value = 1; $("val-radius").textContent = "1.0";
     $("input-color").value = "#ff4d4d";
   }
@@ -560,17 +654,19 @@ window.selectObject = selectObject;
 (function wireInputs() {
   const ipx = $("input-pos-x");
   const ipy = $("input-pos-y");
+  //const ipz = $("input-pos-z");
   const ir = $("input-radius");
   const ic = $("input-color");
   const vpx = $("val-pos-x");
   const vpy = $("val-pos-y");
+  //const vpz = $("input-pos-z");
   const vr = $("val-radius");
   if (!ipx || !ipy || !ir || !ic) return;
 
   function writeAndRefresh() {
     updateScene();
     updateSceneUI();
-    console.log("Scene updated (selected):", selected);
+    // console.log("Scene updated (selected):", selected);
   }
 
   ipx.oninput = () => {
@@ -580,6 +676,9 @@ window.selectObject = selectObject;
       writeAndRefresh();
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].center[0] = parseFloat(ipx.value);
+      writeAndRefresh();
+    } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+      sceneData.torus[selected.index].center[0] = parseFloat(ipx.value);
       writeAndRefresh();
     }
   };
@@ -592,6 +691,9 @@ window.selectObject = selectObject;
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].center[1] = parseFloat(ipy.value);
       writeAndRefresh();
+    } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+      sceneData.torus[selected.index].center[1] = parseFloat(ipy.value);
+      writeAndRefresh();
     }
   };
 
@@ -603,6 +705,10 @@ window.selectObject = selectObject;
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].size[0] = parseFloat(ir.value);
       writeAndRefresh();
+    } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+      // CORRECTION: Torus doesn't have .size, using majorRadius
+      sceneData.torus[selected.index].majorRadius = parseFloat(ir.value);
+      writeAndRefresh();
     }
   };
 
@@ -613,9 +719,13 @@ window.selectObject = selectObject;
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].color = hexToRgb(ic.value);
       writeAndRefresh();
+    } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+      sceneData.torus[selected.index].color = hexToRgb(ic.value);
+      writeAndRefresh();
     }
   };
 })();
+
 
 // --------------------------------------------
 // RENDER LOOP

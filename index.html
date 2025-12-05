@@ -118,7 +118,7 @@
                  <span class="text-xs font-normal whitespace-nowrap hidden sm:inline-block"><span style="opacity: 0.5">FT:</span> <span id="frame-time">0.0ms</span></span>
                  <span id="compile-time" class="text-xs text-gray-400 hidden"></span>
                  <button id="compile-btn" class="px-3 py-1 text-xs rounded bg-[#458588] hover:bg-[#83a598] text-[#1d2021] font-bold transition-colors">
-                  Update Shader
+                  Stop camera
                 </button>
             </div>
           </div>
@@ -172,6 +172,13 @@
                     </svg>
                     Box
                   </button>
+                  <button onclick="addTorus()" class="flex-1 px-3 py-2 text-xs bg-[#B164B3] hover:bg-[#fe8019] text-[#1d2021] font-bold rounded transition-colors flex items-center justify-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <circle cx="12" cy="12" r="5"></circle>
+                    </svg>
+                    Torus
+                  </button>
                 </div>
 
                 <!-- Scene Objects List -->
@@ -196,6 +203,13 @@
                       <input type="range" class="flex-1 h-1 bg-[#3c3836] rounded-lg appearance-none cursor-pointer" min="-5" max="5" step="0.1" value="1.0" id="input-pos-y">
                       <span id="val-pos-y" class="text-xs text-[#ebdbb2] w-8 text-right font-mono">1.0</span>
                    </div>
+
+                   <!--&lt;!&ndash; Z Position &ndash;&gt;
+                   <div class="flex items-center gap-2 mb-1">
+                      <label class="text-xs text-[#928374] w-16 text-right">Pos Z</label>
+                      <input type="range" class="flex-1 h-1 bg-[#3c3836] rounded-lg appearance-none cursor-pointer" min="-5" max="5" step="0.1" value="0.0" id="input-pos-z">
+                      <span id="val-pos-z" class="text-xs text-[#ebdbb2] w-8 text-right font-mono">0.0</span>
+                   </div>-->
 
                    <!-- Radius -->
                    <div class="flex items-center gap-2 mb-1">
