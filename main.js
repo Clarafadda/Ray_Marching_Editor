@@ -124,8 +124,8 @@ function addSphere() {
     return;
   }
   sceneData.spheres.push({
-    center: [0, 1, 0],
-    radius: 1.0,
+    center: [0.5, 0.5, 0.5],
+    radius: 0.5,
     color: [Math.random(), Math.random(), Math.random()]
   });
   sceneData.num_spheres++;
@@ -140,7 +140,7 @@ function addBox() {
   }
   sceneData.boxes.push({
     center: [0, 0.5, 0],
-    size: [1, 1, 1],
+    size: [0.5, 0.5, 0.5],
     color: [Math.random(), Math.random(), Math.random()]
   });
   sceneData.num_boxes++;
@@ -218,6 +218,7 @@ let bindGroup = null;
 
 let startTime = performance.now();
 let lastFrameTime = startTime;
+let isCameraPaused = false;
 let frameCount = 0;
 let lastFpsUpdate = startTime;
 let mouseX = 0, mouseY = 0, mouseDown = false;
@@ -634,7 +635,15 @@ window.addEventListener("resize", resizeCanvas);
 function render() {
   const currentTime = performance.now();
   const deltaTime = (currentTime - lastFrameTime) / 1000;
-  const elapsedTime = (currentTime - startTime) / 1000;
+  let elapsedTime;
+    if (!isCameraPaused) {
+        elapsedTime = (currentTime - startTime) / 1000.0;
+        // Store the time when paused to maintain a consistent view
+        window.staticTime = elapsedTime;
+    } else {
+        // Use the time recorded right before pausing
+        elapsedTime = window.staticTime;
+    }
 
   // update uniforms buffer (float32)
   if (device && uniformBuffer) {
@@ -698,8 +707,18 @@ function render() {
     lastFpsUpdate = currentTime;
   }
 
+  const cameraPosition = new Float32Array([
+        Math.cos(elapsedTime * 0.1) * 6.0, // x
+        2.0,                               // y
+        Math.sin(elapsedTime * 0.1) * 6.0, // z
+        elapsedTime,                       // time <-- This controls rotation in the shader
+    ]);
+    device.queue.writeBuffer(uniformBuffer, 0, cameraPosition);
+
   requestAnimationFrame(render);
 }
+
+window.staticTime = 0;
 
 // --------------------------------------------
 // FULLSCREEN UI
@@ -779,9 +798,19 @@ document.addEventListener("keydown", (e) => {
   // wire compile button
   if (compileBtn) {
     compileBtn.onclick = async () => {
-      const code = editor.getValue();
-      await compileShader(vertexShader, uniformsStruct, sceneStruct, code);
+
+        // 1. Stop/Start the camera turning
+        isCameraPaused = !isCameraPaused;
+        compileBtn.textContent = isCameraPaused ? "Compile & START Camera" : "Compile & STOP Camera";
+
+        // 2. Compile the shader (original functionality)
+        const userCode = editor.getValue();
+        const fullShaderCode = `${uniformsStruct}\n${sceneStruct}\n${userCode}`;
+        createPipeline(fullShaderCode);
     };
+
+    // Set initial text for clarity
+    compileBtn.textContent = "Compile & STOP Camera";
   }
 
   // load main shader (will compile)
