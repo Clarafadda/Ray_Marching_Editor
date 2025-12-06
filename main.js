@@ -854,7 +854,7 @@ document.addEventListener("keydown", (e) => {
         // 2. Compile the shader (original functionality)
         const userCode = editor.getValue();
         const fullShaderCode = `${uniformsStruct}\n${sceneStruct}\n${userCode}`;
-        createPipeline(fullShaderCode);
+        await compileShader(vertexShader, uniformsStruct, sceneStruct, userCode);
     };
 
     // Set initial text for clarity
