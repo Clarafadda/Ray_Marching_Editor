@@ -533,8 +533,10 @@ function selectObject(type, index) {
     $("val-pos-x").textContent = Number(s.center[0]).toFixed(1);
     $("input-pos-y").value = s.center[1];
     $("val-pos-y").textContent = Number(s.center[1]).toFixed(1);
-    $("input-radius").value = s.radius;
-    $("val-radius").textContent = Number(s.radius).toFixed(1);
+    // Sphere uses 'input-long' for radius, but your HTML still has 'input-radius' if it's an old template
+    // Assuming 'input-long' is the correct ID for radius/long, based on your current HTML:
+    $("input-long").value = s.radius;
+    $("val-long").textContent = Number(s.radius).toFixed(1);
     $("input-color").value = rgbToHex(s.color);
   } else if (type === 'box') {
     const b = sceneData.boxes[index];
@@ -544,14 +546,19 @@ function selectObject(type, index) {
     $("val-pos-x").textContent = Number(b.center[0]).toFixed(1);
     $("input-pos-y").value = b.center[1];
     $("val-pos-y").textContent = Number(b.center[1]).toFixed(1);
-    $("input-radius").value = b.size[0];
-    $("val-radius").textContent = Number(b.size[0]).toFixed(1);
+    $("input-long").value = b.size[0];
+    $("val-long").textContent = Number(b.size[0]).toFixed(1);
+    $("input-width").value = b.size[1];
+    $("val-width").textContent = Number(b.size[1]).toFixed(1);
+    $("input-height").value = b.size[2];
+    $("val-height").textContent = Number(b.size[2]).toFixed(1);
     $("input-color").value = rgbToHex(b.color);
   } else {
     if (info) info.textContent = 'Editing: none';
     $("input-pos-x").value = 0; $("val-pos-x").textContent = "0.0";
     $("input-pos-y").value = 0; $("val-pos-y").textContent = "0.0";
-    $("input-radius").value = 1; $("val-radius").textContent = "1.0";
+    // Using 'input-long' as the default dimension control:
+    $("input-long").value = 1; $("val-long").textContent = "1.0";
     $("input-color").value = "#ff4d4d";
   }
 }
@@ -561,12 +568,18 @@ window.selectObject = selectObject;
 (function wireInputs() {
   const ipx = $("input-pos-x");
   const ipy = $("input-pos-y");
-  const ir = $("input-radius");
+  const ilong = $("input-long");
+  const iwidth = $("input-width");
+  const iheight = $("input-height");
   const ic = $("input-color");
   const vpx = $("val-pos-x");
   const vpy = $("val-pos-y");
-  const vr = $("val-radius");
-  if (!ipx || !ipy || !ir || !ic) return;
+  const vlong = $("val-long");
+  const vwidth = $("val-width");
+  const vheight = $("val-height");
+
+  // FIX: Replaced '!ir' (undefined) with checks for the actual dimension inputs
+  if (!ipx || !ipy || !ilong || !iwidth || !iheight || !ic) return;
 
   function writeAndRefresh() {
     updateScene();
@@ -596,13 +609,30 @@ window.selectObject = selectObject;
     }
   };
 
-  ir.oninput = () => {
-    vr.textContent = Number(ir.value).toFixed(1);
+  ilong.oninput = () => {
+    vlong.textContent = Number(ilong.value).toFixed(1);
     if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
-      sceneData.spheres[selected.index].radius = parseFloat(ir.value);
+      sceneData.spheres[selected.index].radius = parseFloat(ilong.value);
       writeAndRefresh();
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
-      sceneData.boxes[selected.index].size[0] = parseFloat(ir.value);
+      sceneData.boxes[selected.index].size[0] = parseFloat(ilong.value);
+      writeAndRefresh();
+    }
+  };
+
+  iwidth.oninput = () => {
+    vwidth.textContent = Number(iwidth.value).toFixed(1);
+    if (selected.type === 'box' && sceneData.boxes[selected.index]) {
+      sceneData.boxes[selected.index].size[1] = parseFloat(iwidth.value);
+      writeAndRefresh();
+    }
+  };
+
+  // Handler for Box Height (size[2])
+  iheight.oninput = () => {
+    vheight.textContent = Number(iheight.value).toFixed(1);
+    if (selected.type === 'box' && sceneData.boxes[selected.index]) {
+      sceneData.boxes[selected.index].size[2] = parseFloat(iheight.value);
       writeAndRefresh();
     }
   };
