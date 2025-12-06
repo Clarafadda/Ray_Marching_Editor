@@ -531,10 +531,10 @@ function selectObject(type, index) {
     if (info) info.textContent = `Editing: Sphere [${index}]`;
     $("input-pos-x").value = s.center[0];
     $("val-pos-x").textContent = Number(s.center[0]).toFixed(1);
-    $("input-pos-y").value = s.center[1];
-    $("val-pos-y").textContent = Number(s.center[1]).toFixed(1);
-    // Sphere uses 'input-long' for radius, but your HTML still has 'input-radius' if it's an old template
-    // Assuming 'input-long' is the correct ID for radius/long, based on your current HTML:
+    $("input-pos-y").value = s.center[1]* -1;
+    $("val-pos-y").textContent = Number(s.center[1]* -1).toFixed(1);
+    $("input-pos-z").value = s.center[2]* -1;
+    $("val-pos-z").textContent = Number(s.center[2]* -1).toFixed(1);
     $("input-long").value = s.radius;
     $("val-long").textContent = Number(s.radius).toFixed(1);
     $("input-color").value = rgbToHex(s.color);
@@ -544,8 +544,10 @@ function selectObject(type, index) {
     if (info) info.textContent = `Editing: Box [${index}]`;
     $("input-pos-x").value = b.center[0];
     $("val-pos-x").textContent = Number(b.center[0]).toFixed(1);
-    $("input-pos-y").value = b.center[1];
-    $("val-pos-y").textContent = Number(b.center[1]).toFixed(1);
+    $("input-pos-y").value = b.center[1]* -1;
+    $("val-pos-y").textContent = Number(b.center[1]* -1).toFixed(1);
+    $("input-pos-z").value = b.center[2]* -1;
+    $("val-pos-z").textContent = Number(b.center[2]* -1).toFixed(1);
     $("input-long").value = b.size[0];
     $("val-long").textContent = Number(b.size[0]).toFixed(1);
     $("input-width").value = b.size[1];
@@ -557,6 +559,7 @@ function selectObject(type, index) {
     if (info) info.textContent = 'Editing: none';
     $("input-pos-x").value = 0; $("val-pos-x").textContent = "0.0";
     $("input-pos-y").value = 0; $("val-pos-y").textContent = "0.0";
+    $("input-pos-z").value = 0; $("val-pos-z").textContent = "0.0";
     // Using 'input-long' as the default dimension control:
     $("input-long").value = 1; $("val-long").textContent = "1.0";
     $("input-color").value = "#ff4d4d";
@@ -568,18 +571,19 @@ window.selectObject = selectObject;
 (function wireInputs() {
   const ipx = $("input-pos-x");
   const ipy = $("input-pos-y");
+  const ipz = $("input-pos-z");
   const ilong = $("input-long");
   const iwidth = $("input-width");
   const iheight = $("input-height");
   const ic = $("input-color");
   const vpx = $("val-pos-x");
   const vpy = $("val-pos-y");
+  const vpz = $("val-pos-z");
   const vlong = $("val-long");
   const vwidth = $("val-width");
   const vheight = $("val-height");
 
-  // FIX: Replaced '!ir' (undefined) with checks for the actual dimension inputs
-  if (!ipx || !ipy || !ilong || !iwidth || !iheight || !ic) return;
+  if (!ipx || !ipy || !ipz || !ilong || !iwidth || !iheight || !ic) return;
 
   function writeAndRefresh() {
     updateScene();
@@ -600,14 +604,28 @@ window.selectObject = selectObject;
 
   ipy.oninput = () => {
     vpy.textContent = Number(ipy.value).toFixed(1);
+    const invertedY = parseFloat(ipy.value) * -1;
     if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
-      sceneData.spheres[selected.index].center[1] = parseFloat(ipy.value);
+      sceneData.spheres[selected.index].center[1] = invertedY;
       writeAndRefresh();
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
-      sceneData.boxes[selected.index].center[1] = parseFloat(ipy.value);
+      sceneData.boxes[selected.index].center[1] = invertedY;
       writeAndRefresh();
     }
   };
+
+  ipz.oninput = () => {
+    vpz.textContent = Number(ipz.value).toFixed(1);
+    const invertedZ = parseFloat(ipz.value) * -1;
+    if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
+      // Note: Center[2] is the Z-axis (forward/back)
+      sceneData.spheres[selected.index].center[2] = invertedZ;
+      writeAndRefresh();
+    } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
+      sceneData.boxes[selected.index].center[2] = invertedZ;
+      writeAndRefresh();
+    }
+   };
 
   ilong.oninput = () => {
     vlong.textContent = Number(ilong.value).toFixed(1);
