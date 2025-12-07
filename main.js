@@ -561,7 +561,19 @@ function selectObject(type, index) {
   if (sel) sel.classList.add("selected");
 
   const info = $("editor-active-info");
+
+  // --- toggle sliders ---
+  const radiusSlider = $("slider-radius");
+  const longSlider   = $("slider-long");
+  const widthSlider  = $("slider-width");
+  const heightSlider = $("slider-height");
+
   if (type === 'sphere') {
+    if (radiusSlider) radiusSlider.style.display = 'flex';
+    if (longSlider) longSlider.style.display = 'none';
+    if (widthSlider) widthSlider.style.display = 'none';
+    if (heightSlider) heightSlider.style.display = 'none';
+
     const s = sceneData.spheres[index];
     if (!s) { if (info) info.textContent = 'Editing: none'; return; }
     if (info) info.textContent = `Editing: Sphere [${index}]`;
@@ -571,10 +583,16 @@ function selectObject(type, index) {
     $("val-pos-y").textContent = Number(s.center[1]).toFixed(1);
     $("input-pos-z").value = s.center[2];
     $("val-pos-z").textContent = Number(s.center[2]).toFixed(1);
-    $("input-long").value = s.radius;
-    $("val-long").textContent = Number(s.radius).toFixed(1);
+    $("input-rad").value = s.radius;
+    $("val-rad").textContent = Number(s.radius).toFixed(1);
     $("input-color").value = rgbToHex(s.color);
+
   } else if (type === 'box') {
+    if (radiusSlider) radiusSlider.style.display = 'none';
+    if (longSlider) longSlider.style.display = 'flex';
+    if (widthSlider) widthSlider.style.display = 'flex';
+    if (heightSlider) heightSlider.style.display = 'flex';
+
     const b = sceneData.boxes[index];
     if (!b) { if (info) info.textContent = 'Editing: none'; return; }
     if (info) info.textContent = `Editing: Box [${index}]`;
@@ -591,23 +609,31 @@ function selectObject(type, index) {
     $("input-height").value = b.size[2];
     $("val-height").textContent = Number(b.size[2]).toFixed(1);
     $("input-color").value = rgbToHex(b.color);
+
   } else {
+    // fallback
+    if (radiusSlider) radiusSlider.style.display = 'flex';
+    if (longSlider) longSlider.style.display = 'flex';
+    if (widthSlider) widthSlider.style.display = 'flex';
+    if (heightSlider) heightSlider.style.display = 'flex';
+
     if (info) info.textContent = 'Editing: none';
     $("input-pos-x").value = 0; $("val-pos-x").textContent = "0.0";
     $("input-pos-y").value = 0; $("val-pos-y").textContent = "0.0";
     $("input-pos-z").value = 0; $("val-pos-z").textContent = "0.0";
-    // Using 'input-long' as the default dimension control:
     $("input-long").value = 1; $("val-long").textContent = "1.0";
     $("input-color").value = "#ff4d4d";
   }
 }
 window.selectObject = selectObject;
 
+
 // wire inputs
 (function wireInputs() {
   const ipx = $("input-pos-x");
   const ipy = $("input-pos-y");
   const ipz = $("input-pos-z");
+  const irad=$("input-rad");
   const ilong = $("input-long");
   const iwidth = $("input-width");
   const iheight = $("input-height");
@@ -615,6 +641,7 @@ window.selectObject = selectObject;
   const vpx = $("val-pos-x");
   const vpy = $("val-pos-y");
   const vpz = $("val-pos-z");
+  const vrad=$("val-rad");
   const vlong = $("val-long");
   const vwidth = $("val-width");
   const vheight = $("val-height");
@@ -664,43 +691,55 @@ window.selectObject = selectObject;
     }
    };
 
-  ilong.oninput = () => {
-    vlong.textContent = Number(ilong.value).toFixed(1);
-    if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
-      sceneData.spheres[selected.index].radius = parseFloat(ilong.value);
-      writeAndRefresh();
-    } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
-      sceneData.boxes[selected.index].size[0] = parseFloat(ilong.value);
-      writeAndRefresh();
-    }
-  };
+   if (irad && vrad) {
+    irad.oninput = () => {
+      vrad.textContent = Number(irad.value).toFixed(1);
+      if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
+        sceneData.spheres[selected.index].radius = parseFloat(irad.value);
+        writeAndRefresh();
+      }
+    };
+  }
 
-  iwidth.oninput = () => {
-    vwidth.textContent = Number(iwidth.value).toFixed(1);
-    if (selected.type === 'box' && sceneData.boxes[selected.index]) {
-      sceneData.boxes[selected.index].size[1] = parseFloat(iwidth.value);
-      writeAndRefresh();
-    }
-  };
+  if (ilong && vlong) {
+    ilong.oninput = () => {
+      vlong.textContent = Number(ilong.value).toFixed(1);
+      if (selected.type === 'box' && sceneData.boxes[selected.index]) {
+        sceneData.boxes[selected.index].size[0] = parseFloat(ilong.value);
+        writeAndRefresh();
+      }
+    };
+  }
+
+  if (iwidth && vwidth) {
+    iwidth.oninput = () => {
+      vwidth.textContent = Number(iwidth.value).toFixed(1);
+      if (selected.type === 'box' && sceneData.boxes[selected.index]) {
+        sceneData.boxes[selected.index].size[1] = parseFloat(iwidth.value);
+        writeAndRefresh();
+      }
+    };
+  }
 
   // Handler for Box Height (size[2])
-  iheight.oninput = () => {
-    vheight.textContent = Number(iheight.value).toFixed(1);
-    if (selected.type === 'box' && sceneData.boxes[selected.index]) {
-      sceneData.boxes[selected.index].size[2] = parseFloat(iheight.value);
-      writeAndRefresh();
-    }
-  };
+  if (iheight && vheight) {
+    iheight.oninput = () => {
+      vheight.textContent = Number(iheight.value).toFixed(1);
+      if (selected.type === 'box' && sceneData.boxes[selected.index]) {
+        sceneData.boxes[selected.index].size[2] = parseFloat(iheight.value);
+        writeAndRefresh();
+      }
+    };
+  }
 
-  ic.oninput = () => {
-    if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
-      sceneData.spheres[selected.index].color = hexToRgb(ic.value);
+  if (ic) {
+    ic.oninput = () => {
+      const c = hexToRgb(ic.value);
+      if (selected.type === 'sphere' && sceneData.spheres[selected.index]) sceneData.spheres[selected.index].color = c;
+      if (selected.type === 'box' && sceneData.boxes[selected.index]) sceneData.boxes[selected.index].color = c;
       writeAndRefresh();
-    } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
-      sceneData.boxes[selected.index].color = hexToRgb(ic.value);
-      writeAndRefresh();
-    }
-  };
+    };
+  }
 })();
 
 // --------------------------------------------
