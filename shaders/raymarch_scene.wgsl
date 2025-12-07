@@ -11,6 +11,11 @@ fn sdBox(p: vec3<f32>, center: vec3<f32>, size: vec3<f32>) -> f32 {
     return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
+fn sd_plane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
+    return dot(p, n) + h;
+}
+
+
 // ============================================
 // SCENE SDF
 // ============================================
@@ -39,6 +44,19 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
         }
     }
 
+    if (scene.num_planes > 0u) {
+        let plane = scene.plane; // Access the single struct
+
+        // Calculate 'h' for sd_plane: h = -dot(center, normal)
+        let n = normalize(plane.normal);
+        let h_param = -dot(plane.center, n);
+        let plane_dist = sd_plane(p, n, h_param);
+        if (plane_dist < minDist) {
+            minDist = plane_dist;
+            matID = 200.0; // Material ID for the plane
+        }
+    }
+
     return vec2<f32>(minDist, matID);
 }
 
@@ -47,22 +65,22 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
 // ============================================
 
 fn getMaterialColor(matID: f32) -> vec3<f32> {
-    // Sphères (ID < 100)
     if (matID < 100.0) {
         let i = u32(matID);
         if (i < scene.num_spheres) {
             return scene.spheres[i].color;
         }
-    }
-    // Boxes (ID >= 100)
-    else {
+    } else if (matID < 200.0) {
         let i = u32(matID - 100.0);
         if (i < scene.num_boxes) {
             return scene.boxes[i].color;
         }
     }
+
+    // Plane handled in shade()
     return vec3<f32>(1.0, 1.0, 1.0);
 }
+
 
 // ============================================
 // NORMAL CALCULATION
@@ -107,21 +125,11 @@ fn rayMarch(ro: vec3<f32>, rd: vec3<f32>) -> vec2<f32> {
 }
 
 // ============================================
-// CAMERA
-// ============================================
-
-fn getCamera(uv: vec2<f32>, eye: vec3<f32>, lookAt: vec3<f32>) -> vec3<f32> {
-    let forward = normalize(lookAt - eye);
-    let right = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), forward));
-    let up = cross(forward, right);
-    return normalize(forward + uv.x * right + uv.y * up);
-}
-
-// ============================================
-// SHADING
+// SHADING (Kept from your current code)
 // ============================================
 
 fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
+
     let normal = calcNormal(p);
     let lightDir = normalize(vec3<f32>(1.0, 1.0, 1.0));
 
@@ -141,39 +149,53 @@ fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
 }
 
 // ============================================
-// FRAGMENT SHADER
+// FRAGMENT SHADER (Uses the camera setup from raymarch_basic.wgsl)
 // ============================================
 
 @fragment
 fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
-    // Coordonnées UV normalisées [-1, 1]
-    let uv = (fragCoord.xy - uniforms.resolution * 0.5) / uniforms.resolution.y;
+    // 1. Normalized UV coordinates [-1, 1]
+    // Use min(res.x, res.y) for aspect ratio correction, matching raymarch_basic
+    let uv = vec2<f32>((fragCoord.x - uniforms.resolution.x * 0.5),-(fragCoord.y - uniforms.resolution.y * 0.5)) / min(uniforms.resolution.x, uniforms.resolution.y);
 
-    // Position de la caméra (orbite)
-    let camDist = 8.0;
-    let camAngle = uniforms.time * 0.3;
-    let eye = vec3<f32>(
-        cos(camAngle) * camDist,
-        2.0,
-        sin(camAngle) * camDist
-    );
-    let lookAt = vec3<f32>(0.0, 0.0, 0.0);
 
-    // Direction du rayon
-    let rd = getCamera(uv, eye, lookAt);
+    // 2. Orbital Camera Setup (from raymarch_basic.wgsl)
 
-    // Ray marching
-    let result = rayMarch(eye, rd);
+    // Pitch/Yaw setup: uses time for rotation and mouse for pitch control
+    let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y) * 3.0, 0.05, 1.5); // 0.05 to 1.5 radians
+    let yaw = uniforms.time * 0.5; // Auto-orbits around the center
+
+    // Camera Coords
+    let cam_dist = 4.0;
+    let cam_target = vec3<f32>(0.0, 0.0, 0.0);
+    // Calculate cam_pos on the orbit
+    let cam_pos = vec3<f32>(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * cam_dist;
+
+    // 3. Camera Matrix (Ray Direction setup)
+    // Create the coordinate system based on camera position and target
+    let cam_forward = normalize(cam_target - cam_pos);
+    let cam_right = normalize(cross(cam_forward, vec3<f32>(0.0, 1.0, 0.0)));
+    let cam_up = cross(cam_right, cam_forward); // Re-orthogonalized up
+
+    // Ray Direction
+    let focal_length = 1.5;
+    // Note: The sign for cam_up * uv.y is inverted here to match the common
+    // raymarching convention (Y up is positive screen Y, not inverted like some APIs)
+    let rd = normalize(cam_right * uv.x + cam_up * uv.y + cam_forward * focal_length);
+
+    // 4. Ray Marching
+    let ro = cam_pos;
+    let result = rayMarch(ro, rd);
     let t = result.x;
     let matID = result.y;
 
     var color = vec3<f32>(0.0);
 
     if (matID >= 0.0) {
-        let p = eye + rd * t;
+        let p = ro + rd * t;
         color = shade(p, rd, matID);
     } else {
-        // Fond dégradé
+        // Sky Background (Simple dark gradient)
         color = vec3<f32>(0.1, 0.1, 0.15) * (1.0 - uv.y * 0.5);
     }
 

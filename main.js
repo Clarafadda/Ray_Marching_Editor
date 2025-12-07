@@ -10,8 +10,9 @@ const MAX_BOXES = 3;
 
 const SPHERE_SIZE = 32;
 const BOX_SIZE = 48;
+const PLANE_SIZE = 48;
 const SCENE_HEADER_SIZE = 16;
-const SCENE_SIZE = (SPHERE_SIZE * MAX_SPHERES) + (BOX_SIZE * MAX_BOXES) + SCENE_HEADER_SIZE;
+const SCENE_SIZE = (SPHERE_SIZE * 5) + (BOX_SIZE * 3) + PLANE_SIZE + SCENE_HEADER_SIZE;
 
 // --------------------------------------------
 // SCENE DATA BUFFER
@@ -19,60 +20,95 @@ const SCENE_SIZE = (SPHERE_SIZE * MAX_SPHERES) + (BOX_SIZE * MAX_BOXES) + SCENE_
 const sceneData = {
   spheres: [],
   boxes: [],
+  plane: {
+    center: [0.0, 0.0, 0.0], // A point on the plane
+    normal: [0.0, 1.0, 0.0], // Normal vector (pointing Up: Y-axis)
+    color: [0.2, 0.2, 0.2]   // Base color
+    // We don't need 'height' here, we calculate it in the shader based on center/normal
+  },
+
   num_spheres: 0,
-  num_boxes: 0
+  num_boxes: 0,
+  num_planes: 1
 };
 
 function createSceneArrayBuffer(data) {
   const buffer = new ArrayBuffer(SCENE_SIZE);
   const view = new DataView(buffer);
-  let offset = 0;
+  let offset = 0; // Initialize offset at 0
 
-  // spheres
+  // 1. SPHERES (5 * 32 bytes = 160 bytes total)
   for (let i = 0; i < MAX_SPHERES; i++) {
+    const itemOffset = offset + (i * SPHERE_SIZE); // Calculate the start for this specific sphere
+
     if (i < data.num_spheres && data.spheres[i]) {
       const s = data.spheres[i];
-      view.setFloat32(offset + 0, s.center[0], true);
-      view.setFloat32(offset + 4, s.center[1], true);
-      view.setFloat32(offset + 8, s.center[2], true);
-      view.setFloat32(offset + 12, s.radius, true);
-      view.setFloat32(offset + 16, s.color[0], true);
-      view.setFloat32(offset + 20, s.color[1], true);
-      view.setFloat32(offset + 24, s.color[2], true);
-      view.setFloat32(offset + 28, 0, true);
+      view.setFloat32(itemOffset + 0, s.center[0], true);
+      view.setFloat32(itemOffset + 4, s.center[1], true);
+      view.setFloat32(itemOffset + 8, s.center[2], true);
+      view.setFloat32(itemOffset + 12, s.radius, true);
+      view.setFloat32(itemOffset + 16, s.color[0], true);
+      view.setFloat32(itemOffset + 20, s.color[1], true);
+      view.setFloat32(itemOffset + 24, s.color[2], true);
+      view.setFloat32(itemOffset + 28, 0, true); // Padding
     } else {
-      for (let j = 0; j < SPHERE_SIZE; j += 4) view.setFloat32(offset + j, 0, true);
+      for (let j = 0; j < SPHERE_SIZE; j += 4) view.setFloat32(itemOffset + j, 0, true);
     }
-    offset += SPHERE_SIZE;
   }
 
-  // boxes
+  offset = SPHERE_SIZE * MAX_SPHERES; // offset is now 160
+
+  // 2. BOXES (3 * 48 bytes = 144 bytes total)
   for (let i = 0; i < MAX_BOXES; i++) {
+    const itemOffset = offset + (i * BOX_SIZE); // Calculate the start for this specific box
+
     if (i < data.num_boxes && data.boxes[i]) {
       const b = data.boxes[i];
-      view.setFloat32(offset + 0, b.center[0], true);
-      view.setFloat32(offset + 4, b.center[1], true);
-      view.setFloat32(offset + 8, b.center[2], true);
-      view.setFloat32(offset + 12, 0, true);
-      view.setFloat32(offset + 16, b.size[0], true);
-      view.setFloat32(offset + 20, b.size[1], true);
-      view.setFloat32(offset + 24, b.size[2], true);
-      view.setFloat32(offset + 28, 0, true);
-      view.setFloat32(offset + 32, b.color[0], true);
-      view.setFloat32(offset + 36, b.color[1], true);
-      view.setFloat32(offset + 40, b.color[2], true);
-      view.setFloat32(offset + 44, 0, true);
+      view.setFloat32(itemOffset + 0, b.center[0], true);
+      view.setFloat32(itemOffset + 4, b.center[1], true);
+      view.setFloat32(itemOffset + 8, b.center[2], true);
+      view.setFloat32(itemOffset + 12, 0, true); // Padding 1
+      view.setFloat32(itemOffset + 16, b.size[0], true);
+      view.setFloat32(itemOffset + 20, b.size[1], true);
+      view.setFloat32(itemOffset + 24, b.size[2], true);
+      view.setFloat32(itemOffset + 28, 0, true); // Padding 2
+      view.setFloat32(itemOffset + 32, b.color[0], true);
+      view.setFloat32(itemOffset + 36, b.color[1], true);
+      view.setFloat32(itemOffset + 40, b.color[2], true);
+      view.setFloat32(itemOffset + 44, 0, true); // Padding 3
     } else {
-      for (let j = 0; j < BOX_SIZE; j += 4) view.setFloat32(offset + j, 0, true);
+      for (let j = 0; j < BOX_SIZE; j += 4) view.setFloat32(itemOffset + j, 0, true);
     }
-    offset += BOX_SIZE;
   }
+  offset += BOX_SIZE * MAX_BOXES; // offset is now 160 + 144 = 304
 
-  // header: num_spheres, num_boxes, pad
+  // 3. PLANE (1 * 48 bytes = 48 bytes total)
+  if (data.num_planes > 0 && data.plane) {
+    const p = data.plane;
+    view.setFloat32(offset + 0, p.center[0], true);
+    view.setFloat32(offset + 4, p.center[1], true);
+    view.setFloat32(offset + 8, p.center[2], true);
+    view.setFloat32(offset + 12, 0, true); // Padding 1 (f32)
+    view.setFloat32(offset + 16, p.normal[0], true);
+    view.setFloat32(offset + 20, p.normal[1], true);
+    view.setFloat32(offset + 24, p.normal[2], true);
+    view.setFloat32(offset + 28, 0, true); // Padding 2 (f32)
+    view.setFloat32(offset + 32, p.color[0], true);
+    view.setFloat32(offset + 36, p.color[1], true);
+    view.setFloat32(offset + 40, p.color[2], true);
+    view.setFloat32(offset + 44, 0, true); // Padding 3 (f32)
+  }
+  offset += PLANE_SIZE; // offset is now 304 + 48 = 352
+
+  // 4. HEADER (16 bytes total)
+  // Starts at offset 352. SCENE_SIZE is 368.
+
   view.setUint32(offset + 0, data.num_spheres, true);
   view.setUint32(offset + 4, data.num_boxes, true);
-  view.setUint32(offset + 8, 0, true);
-  view.setUint32(offset + 12, 0, true);
+  view.setUint32(offset + 8, data.num_planes, true);
+  view.setUint32(offset + 12, 0, true); // Padding (u32)
+
+  // offset += SCENE_HEADER_SIZE; // Not strictly necessary since we return buffer
 
   return buffer;
 }
@@ -124,7 +160,7 @@ function addSphere() {
     return;
   }
   sceneData.spheres.push({
-    center: [0.5, 0.5, 0.5],
+    center: [0.0, 0.5, 0.0],
     radius: 0.5,
     color: [Math.random(), Math.random(), Math.random()]
   });
@@ -139,7 +175,7 @@ function addBox() {
     return;
   }
   sceneData.boxes.push({
-    center: [0, 0.5, 0],
+    center: [0.0, 0.5, 0.0],
     size: [0.5, 0.5, 0.5],
     color: [Math.random(), Math.random(), Math.random()]
   });
@@ -531,10 +567,10 @@ function selectObject(type, index) {
     if (info) info.textContent = `Editing: Sphere [${index}]`;
     $("input-pos-x").value = s.center[0];
     $("val-pos-x").textContent = Number(s.center[0]).toFixed(1);
-    $("input-pos-y").value = s.center[1]* -1;
-    $("val-pos-y").textContent = Number(s.center[1]* -1).toFixed(1);
-    $("input-pos-z").value = s.center[2]* -1;
-    $("val-pos-z").textContent = Number(s.center[2]* -1).toFixed(1);
+    $("input-pos-y").value = s.center[1];
+    $("val-pos-y").textContent = Number(s.center[1]).toFixed(1);
+    $("input-pos-z").value = s.center[2];
+    $("val-pos-z").textContent = Number(s.center[2]).toFixed(1);
     $("input-long").value = s.radius;
     $("val-long").textContent = Number(s.radius).toFixed(1);
     $("input-color").value = rgbToHex(s.color);
@@ -544,10 +580,10 @@ function selectObject(type, index) {
     if (info) info.textContent = `Editing: Box [${index}]`;
     $("input-pos-x").value = b.center[0];
     $("val-pos-x").textContent = Number(b.center[0]).toFixed(1);
-    $("input-pos-y").value = b.center[1]* -1;
-    $("val-pos-y").textContent = Number(b.center[1]* -1).toFixed(1);
-    $("input-pos-z").value = b.center[2]* -1;
-    $("val-pos-z").textContent = Number(b.center[2]* -1).toFixed(1);
+    $("input-pos-y").value = b.center[1];
+    $("val-pos-y").textContent = Number(b.center[1]).toFixed(1);
+    $("input-pos-z").value = b.center[2];
+    $("val-pos-z").textContent = Number(b.center[2]).toFixed(1);
     $("input-long").value = b.size[0];
     $("val-long").textContent = Number(b.size[0]).toFixed(1);
     $("input-width").value = b.size[1];
@@ -583,7 +619,8 @@ window.selectObject = selectObject;
   const vwidth = $("val-width");
   const vheight = $("val-height");
 
-  if (!ipx || !ipy || !ipz || !ilong || !iwidth || !iheight || !ic) return;
+  if (!ipx || !ipy || !ipz || !ilong || !iwidth || !iheight || !ic ||
+    !vpx || !vpy || !vpz || !vlong || !vwidth || !vheight) return;
 
   function writeAndRefresh() {
     updateScene();
@@ -604,7 +641,7 @@ window.selectObject = selectObject;
 
   ipy.oninput = () => {
     vpy.textContent = Number(ipy.value).toFixed(1);
-    const invertedY = parseFloat(ipy.value) * -1;
+    const invertedY = parseFloat(ipy.value);
     if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
       sceneData.spheres[selected.index].center[1] = invertedY;
       writeAndRefresh();
@@ -616,7 +653,7 @@ window.selectObject = selectObject;
 
   ipz.oninput = () => {
     vpz.textContent = Number(ipz.value).toFixed(1);
-    const invertedZ = parseFloat(ipz.value) * -1;
+    const invertedZ = parseFloat(ipz.value);
     if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
       // Note: Center[2] is the Z-axis (forward/back)
       sceneData.spheres[selected.index].center[2] = invertedZ;
@@ -755,14 +792,6 @@ function render() {
     lastFpsUpdate = currentTime;
   }
 
-  const cameraPosition = new Float32Array([
-        Math.cos(elapsedTime * 0.1) * 6.0, // x
-        2.0,                               // y
-        Math.sin(elapsedTime * 0.1) * 6.0, // z
-        elapsedTime,                       // time <-- This controls rotation in the shader
-    ]);
-    device.queue.writeBuffer(uniformBuffer, 0, cameraPosition);
-
   requestAnimationFrame(render);
 }
 
@@ -849,7 +878,7 @@ document.addEventListener("keydown", (e) => {
 
         // 1. Stop/Start the camera turning
         isCameraPaused = !isCameraPaused;
-        compileBtn.textContent = isCameraPaused ? "Compile & START Camera" : "Compile & STOP Camera";
+        compileBtn.textContent = isCameraPaused ? "▶ Start Camera" : "⏸ Pause Camera";
 
         // 2. Compile the shader (original functionality)
         const userCode = editor.getValue();
@@ -858,7 +887,7 @@ document.addEventListener("keydown", (e) => {
     };
 
     // Set initial text for clarity
-    compileBtn.textContent = "Compile & STOP Camera";
+    compileBtn.textContent = "⏸ Pause Camera";
   }
 
   // load main shader (will compile)
