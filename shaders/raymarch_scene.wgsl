@@ -31,10 +31,17 @@ fn sdPlane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
 fn smoothUnionSDF(d1: f32, mat1: f32, d2: f32, mat2: f32, k: f32) -> vec2<f32> {
     let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
     let d = mix(d2, d1, h) - k * h * (1.0 - h);
-    let mat = select(mat1, mat2, d2 < d1);
-    return vec2<f32>(d, mat);
+    let matrice = select(mat1, mat2, d2 < d1);
+    return vec2<f32>(d, matrice);
 }
 
+fn gridPattern(p: vec3<f32>, size: f32, thickness: f32) -> f32 {
+    // world-space xz grid
+    let fx = abs(fract(p.x / size - 0.5) - 0.5);
+    let fz = abs(fract(p.z / size - 0.5) - 0.5);
+    let lines = step(fx, thickness) + step(fz, thickness);
+    return clamp(lines, 0.0, 1.0); // 0 = nothing, 1 = line
+}
 
 
 
@@ -286,7 +293,6 @@ fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
     let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y) * 1.5, 0.1, 1.4);
     let yaw = (uniforms.mouse.x / uniforms.resolution.x) * 6.283185 + uniforms.time * 0.5;
 
-
     let cam_dist = 4.0;
     let cam_target = vec3<f32>(0.0);
     let cam_pos = vec3<f32>(
@@ -309,8 +315,8 @@ fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
     let t = hit.x;
     let matID = hit.y;
 
+    // Compute scene color
     var color = vec3<f32>(0.0);
-
     if (matID >= 0.0) {
         let p = ro + rd * t;
         color = shade(p, rd, matID);
@@ -318,8 +324,25 @@ fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
         color = vec3<f32>(0.1, 0.1, 0.15) * (1.0 - scene_uv.y * 0.5);
     }
 
+    // Overlay transparent grid on the XZ plane
+    let groundY = 0.0;
+    let tGrid = (groundY - ro.y) / rd.y;
+
+    // only if grid is in front of camera, in range, and before the nearest object
+    if (tGrid > 0.0 && tGrid < 20.0 && (matID < 0.0 || tGrid < t)) {
+        let pGrid = ro + rd * tGrid;
+        let g = gridPattern(pGrid, 1.0, 0.02); // size=1, thickness=0.02
+        let gridColor = vec3<f32>(0.8, 0.8, 0.8);
+        let fade = clamp(1.0 - tGrid * 0.05, 0.0, 1.0);
+        color = mix(color, gridColor, g * 0.3 * fade);
+    }
+
+
+
+    // Apply gamma correction
     color = pow(color, vec3<f32>(1.0 / 2.2));
 
+    // Draw axes indicator
     let axis = drawAxisIndicator(indicator_uv_flipped, cam_right, cam_up, cam_forward);
     color = mix(color, axis.rgb, axis.a);
 
