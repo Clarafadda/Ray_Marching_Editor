@@ -18,9 +18,11 @@ fn sdTorus(p: vec3<f32>, t: vec2<f32>) -> f32 {
     return length(q) - t.y;
 }
 
-fn sdPlan(p: vec3<f32>, normal: vec3<f32>, distance: f32) -> f32 {
-    return dot(p, normal) + distance;
+fn sdPlan(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
+    return dot(p, normalize(n)) + h;
 }
+
+
 
 
 
@@ -155,21 +157,28 @@ fn rayMarch(ro: vec3<f32>, rd: vec3<f32>) -> vec2<f32> {
 
 fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
     let normal = calcNormal(p);
-    let lightDir = normalize(vec3<f32>(1.0, 1.0, 1.0));
+    let lightPos = vec3<f32>(2.0, 5.0, -1.0);
+    let lightDir = normalize(lightPos - p);
 
     let baseColor = getMaterialColor(matID);
 
     // Diffuse
     let diffuse = max(dot(normal, lightDir), 0.0);
 
+    // Shadow Casting
+    let shadowOrigin = p + normal * 0.01; // Offset to avoid self-intersection
+    let shadowResult = rayMarch(shadowOrigin, lightDir);
+    let distToLight = length(lightPos - shadowOrigin);
+    let shadow = select(0.3, 1.0, shadowResult.x > distToLight);
+
     // Specular
     let reflectDir = reflect(-lightDir, normal);
     let specular = pow(max(dot(reflectDir, -rd), 0.0), 32.0);
 
     // Ambient
-    let ambient = 0.1;
+    let ambient = 0.2;
 
-    return baseColor * (ambient + diffuse * 0.7 + specular * 0.3);
+    return baseColor * (ambient + diffuse * shadow * 0.7 + specular * 0.3);
 }
 
 // ============================================
@@ -185,8 +194,9 @@ fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
     ) / min(uniforms.resolution.x, uniforms.resolution.y);
 
     // 2. Orbital Camera Setup
-    let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y) * 3.0, 0.05, 1.5);
-    let yaw = uniforms.time * 0.5;
+    // 2. Orbital Camera Setup
+    let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y) * 3.14159, 0.05, 3.09);
+    let yaw = (uniforms.mouse.x / uniforms.resolution.x) * 6.28318 + uniforms.time * 0.5;
 
     // Camera positioning
     let cam_dist = 4.0;

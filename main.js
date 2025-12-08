@@ -33,7 +33,11 @@ const sceneData = {
   spheres: [],
   boxes: [],
   torus: [],
-  plans: [],
+  plans: [{
+    normal: [0, 1, 0],    // Pointing up
+    distance: 0.5,        // Ground plane at y = -0.5
+    color: [0.7, 0.7, 0.7] // Gray
+  }],
 
   num_spheres: 0,
   num_boxes: 0,
