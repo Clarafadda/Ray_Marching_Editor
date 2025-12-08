@@ -1,5 +1,3 @@
-
-
 // ============================================
 // SIGNED DISTANCE FUNCTIONS
 // ============================================
@@ -18,13 +16,9 @@ fn sdTorus(p: vec3<f32>, t: vec2<f32>) -> f32 {
     return length(q) - t.y;
 }
 
-fn sdPlan(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
+fn sdPlane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
     return dot(p, normalize(n)) + h;
 }
-
-
-
-
 
 // ============================================
 // SCENE SDF
@@ -34,44 +28,44 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
     var minDist = 1000.0;
     var matID = 0.0;
 
-    // Test all spheres
+    // Spheres
     for (var i = 0u; i < scene.num_spheres; i++) {
-        let sphere = scene.spheres[i];
-        let dist = sdSphere(p, sphere.center, sphere.radius);
-        if (dist < minDist) {
-            minDist = dist;
+        let s = scene.spheres[i];
+        let d = sdSphere(p, s.center, s.radius);
+        if (d < minDist) {
+            minDist = d;
             matID = f32(i);
         }
     }
 
-    // Test all boxes (offset 100 to distinguish)
+    // Boxes (offset +100)
     for (var i = 0u; i < scene.num_boxes; i++) {
-        let box = scene.boxes[i];
-        let dist = sdBox(p, box.center, box.size);
-        if (dist < minDist) {
-            minDist = dist;
+        let b = scene.boxes[i];
+        let d = sdBox(p, b.center, b.size);
+        if (d < minDist) {
+            minDist = d;
             matID = f32(i) + 100.0;
         }
     }
 
-    // Test all plans (offset 200)
+    // Planes (offset +200)
     for (var i = 0u; i < scene.num_plans; i++) {
-        let plan = scene.plans[i];
-        let dist = sdPlan(p, plan.normal, plan.distance);
-        if (dist < minDist) {
-            minDist = dist;
+        let pl = scene.plans[i];
+        let d = sdPlane(p, pl.normal, pl.distance);
+        if (d < minDist) {
+            minDist = d;
             matID = f32(i) + 200.0;
         }
     }
 
-    // Test all torus (offset 300)
+    // Torus (offset +300)
     for (var i = 0u; i < scene.num_torus; i++) {
-        let torus = scene.torus[i];
-        let p_local = p - torus.center;
-        let radii = vec2<f32>(torus.major_radius, torus.minor_radius);
-        let dist = sdTorus(p_local, radii);
-        if (dist < minDist) {
-            minDist = dist;
+        let t = scene.torus[i];
+        let p_local = p - t.center;
+        let rad = vec2<f32>(t.major_radius, t.minor_radius);
+        let d = sdTorus(p_local, rad);
+        if (d < minDist) {
+            minDist = d;
             matID = f32(i) + 300.0;
         }
     }
@@ -84,28 +78,40 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
 // ============================================
 
 fn getMaterialColor(matID: f32) -> vec3<f32> {
+
+    // Sphere range 0–99
     if (matID < 100.0) {
         let i = u32(matID);
         if (i < scene.num_spheres) {
             return scene.spheres[i].color;
         }
-    } else if (matID < 200.0) {
+    }
+
+    // Boxes 100–199
+    if (matID < 200.0) {
         let i = u32(matID - 100.0);
         if (i < scene.num_boxes) {
             return scene.boxes[i].color;
         }
-    } else if (matID < 300.0) {
+    }
+
+    // Planes 200–299
+    if (matID < 300.0) {
         let i = u32(matID - 200.0);
         if (i < scene.num_plans) {
             return scene.plans[i].color;
         }
-    } else if (matID < 400.0) {
+    }
+
+    // Torus 300–399
+    if (matID < 400.0) {
         let i = u32(matID - 300.0);
         if (i < scene.num_torus) {
             return scene.torus[i].color;
         }
     }
 
+    // Fallback color (grey)
     return vec3<f32>(0.5, 0.5, 0.5);
 }
 
@@ -116,6 +122,7 @@ fn getMaterialColor(matID: f32) -> vec3<f32> {
 fn calcNormal(p: vec3<f32>) -> vec3<f32> {
     let eps = 0.0001;
     let h = vec2<f32>(eps, 0.0);
+
     return normalize(vec3<f32>(
         sceneSDF(p + h.xyy).x - sceneSDF(p - h.xyy).x,
         sceneSDF(p + h.yxy).x - sceneSDF(p - h.yxy).x,
@@ -133,22 +140,88 @@ fn rayMarch(ro: vec3<f32>, rd: vec3<f32>) -> vec2<f32> {
 
     for (var i = 0; i < 100; i++) {
         let p = ro + rd * t;
-        let result = sceneSDF(p);
-        let d = result.x;
+        let d = sceneSDF(p).x;
 
         if (d < 0.001) {
-            matID = result.y;
+            matID = sceneSDF(p).y;
             break;
         }
 
         t += d;
 
-        if (t > 100.0) {
-            break;
-        }
+        if (t > 100.0) { break; }
     }
 
     return vec2<f32>(t, matID);
+}
+
+// ============================================
+// DISTANCE TO LINE SEGMENT
+// ============================================
+
+fn distanceToLineSegment(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
+    let pa = p - a;
+    let ba = b - a;
+    let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
+// ============================================
+// AXIS INDICATOR
+// ============================================
+
+fn drawAxisIndicator(
+    uv: vec2<f32>,
+    cam_right: vec3<f32>,
+    cam_up: vec3<f32>,
+    cam_forward: vec3<f32>
+) -> vec4<f32> {
+
+    let indicator_pos = vec2<f32>(-0.8, -0.7);
+    let indicator_size = 0.15;
+
+    let local_uv = uv - indicator_pos;
+
+    if (length(local_uv) > indicator_size) {
+        return vec4<f32>(0.0);
+    }
+
+    let axis_x = vec3<f32>(1.0, 0.0, 0.0);
+    let axis_y = vec3<f32>(0.0, 1.0, 0.0);
+    let axis_z = vec3<f32>(0.0, 0.0, 1.0);
+
+    let screen_x = vec2<f32>(dot(axis_x, cam_right), dot(axis_x, cam_up)) * 0.12;
+    let screen_y = vec2<f32>(dot(axis_y, cam_right), dot(axis_y, cam_up)) * 0.12;
+    let screen_z = vec2<f32>(dot(axis_z, cam_right), dot(axis_z, cam_up)) * 0.12;
+
+    let line_width = 0.008;
+    var color = vec3<f32>(0.0);
+    var alpha = 0.0;
+
+    if (dot(axis_x, cam_forward) > -0.2) {
+        let d = distanceToLineSegment(local_uv, vec2<f32>(0.0), screen_x);
+        if (d < line_width) { color = vec3<f32>(1.0, 0.2, 0.2); alpha = 1.0; }
+    }
+
+    if (dot(axis_y, cam_forward) > -0.2) {
+        let d = distanceToLineSegment(local_uv, vec2<f32>(0.0), screen_y);
+        if (d < line_width) { color = vec3<f32>(0.2, 1.0, 0.2); alpha = 1.0; }
+    }
+
+    if (dot(axis_z, cam_forward) > -0.2) {
+        let d = distanceToLineSegment(local_uv, vec2<f32>(0.0), screen_z);
+        if (d < line_width) { color = vec3<f32>(0.2, 0.5, 1.0); alpha = 1.0; }
+    }
+
+    if (length(local_uv) < 0.015) {
+        color = vec3<f32>(0.8); alpha = 1.0;
+    }
+
+    if (alpha == 0.0 && length(local_uv) < indicator_size * 0.9) {
+        color = vec3<f32>(0.1); alpha = 0.5;
+    }
+
+    return vec4<f32>(color, alpha);
 }
 
 // ============================================
@@ -161,21 +234,16 @@ fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
     let lightDir = normalize(lightPos - p);
 
     let baseColor = getMaterialColor(matID);
-
-    // Diffuse
     let diffuse = max(dot(normal, lightDir), 0.0);
 
-    // Shadow Casting
-    let shadowOrigin = p + normal * 0.01; // Offset to avoid self-intersection
-    let shadowResult = rayMarch(shadowOrigin, lightDir);
+    // Shadow
+    let shadowOrigin = p + normal * 0.01;
+    let shadowHit = rayMarch(shadowOrigin, lightDir);
     let distToLight = length(lightPos - shadowOrigin);
-    let shadow = select(0.3, 1.0, shadowResult.x > distToLight);
+    let shadow = select(0.3, 1.0, shadowHit.x > distToLight);
 
-    // Specular
     let reflectDir = reflect(-lightDir, normal);
     let specular = pow(max(dot(reflectDir, -rd), 0.0), 32.0);
-
-    // Ambient
     let ambient = 0.2;
 
     return baseColor * (ambient + diffuse * shadow * 0.7 + specular * 0.3);
@@ -187,40 +255,42 @@ fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
 
 @fragment
 fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
-    // 1. Normalized UV coordinates [-1, 1]
-    let uv = vec2<f32>(
+
+    let min_res = min(uniforms.resolution.x, uniforms.resolution.y);
+
+    let scene_uv = vec2<f32>(
         (fragCoord.x - uniforms.resolution.x * 0.5),
         -(fragCoord.y - uniforms.resolution.y * 0.5)
-    ) / min(uniforms.resolution.x, uniforms.resolution.y);
+    ) / min_res;
 
-    // 2. Orbital Camera Setup
-    // 2. Orbital Camera Setup
-    let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y) * 3.14159, 0.05, 3.09);
-    let yaw = (uniforms.mouse.x / uniforms.resolution.x) * 6.28318 + uniforms.time * 0.5;
+    let indicator_uv = (fragCoord.xy / uniforms.resolution.xy) * 2.0 - 1.0;
+    let indicator_uv_flipped = vec2<f32>(indicator_uv.x, -indicator_uv.y);
 
-    // Camera positioning
+    let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y) * 1.5, 0.1, 1.4);
+    let yaw = (uniforms.mouse.x / uniforms.resolution.x) * 6.283185 + uniforms.time * 0.5;
+
+
     let cam_dist = 4.0;
-    let cam_target = vec3<f32>(0.0, 0.0, 0.0);
+    let cam_target = vec3<f32>(0.0);
     let cam_pos = vec3<f32>(
         sin(yaw) * cos(pitch),
         sin(pitch),
         cos(yaw) * cos(pitch)
     ) * cam_dist;
 
-    // 3. Camera Matrix
     let cam_forward = normalize(cam_target - cam_pos);
     let cam_right = normalize(cross(cam_forward, vec3<f32>(0.0, 1.0, 0.0)));
     let cam_up = cross(cam_right, cam_forward);
 
-    // Ray Direction
-    let focal_length = 1.5;
-    let rd = normalize(cam_right * uv.x + cam_up * uv.y + cam_forward * focal_length);
+    let focal = 1.5;
+    let rd = normalize(cam_right * scene_uv.x +
+                       cam_up * scene_uv.y +
+                       cam_forward * focal);
 
-    // 4. Ray Marching
     let ro = cam_pos;
-    let result = rayMarch(ro, rd);
-    let t = result.x;
-    let matID = result.y;
+    let hit = rayMarch(ro, rd);
+    let t = hit.x;
+    let matID = hit.y;
 
     var color = vec3<f32>(0.0);
 
@@ -228,12 +298,13 @@ fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
         let p = ro + rd * t;
         color = shade(p, rd, matID);
     } else {
-        // Sky Background
-        color = vec3<f32>(0.1, 0.1, 0.15) * (1.0 - uv.y * 0.5);
+        color = vec3<f32>(0.1, 0.1, 0.15) * (1.0 - scene_uv.y * 0.5);
     }
 
-    // Gamma correction
     color = pow(color, vec3<f32>(1.0 / 2.2));
+
+    let axis = drawAxisIndicator(indicator_uv_flipped, cam_right, cam_up, cam_forward);
+    color = mix(color, axis.rgb, axis.a);
 
     return vec4<f32>(color, 1.0);
 }
