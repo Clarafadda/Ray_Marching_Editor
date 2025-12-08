@@ -7,30 +7,38 @@
 // --------------------------------------------
 const MAX_SPHERES = 5;
 const MAX_BOXES = 3;
-const MAX_PLANES = 2;
+const MAX_TORUS = 3;
+const MAX_PLANS = 2;
+
 
 const SPHERE_SIZE = 32;
 const BOX_SIZE = 48;
-const PLANE_SIZE = 48;
+const TORUS_SIZE = 48;
+const PLAN_SIZE = 48;
 const SCENE_HEADER_SIZE = 16;
+const FINAL_PADDING = 16;
 
 const SCENE_SIZE =
   (SPHERE_SIZE * MAX_SPHERES) +
   (BOX_SIZE * MAX_BOXES)  +
-  (PLANE_SIZE * MAX_PLANES) +
-  SCENE_HEADER_SIZE;
+  (TORUS_SIZE * MAX_TORUS) +
+  (PLAN_SIZE * MAX_PLANS) +
+  SCENE_HEADER_SIZE + FINAL_PADDING;
 
+console.log("✅ Correct SCENE_SIZE:", SCENE_SIZE, "bytes");
 // --------------------------------------------
 // SCENE DATA BUFFER
 // --------------------------------------------
 const sceneData = {
   spheres: [],
   boxes: [],
-  planes: [],
+  torus: [],
+  plans: [],
 
   num_spheres: 0,
   num_boxes: 0,
-  num_planes: 0
+  num_torus: 0,
+  num_plans: 0
 };
 
 function createSceneArrayBuffer(data) {
@@ -40,85 +48,103 @@ function createSceneArrayBuffer(data) {
 
   // 1. SPHERES (5 * 32 bytes = 160 bytes total)
   for (let i = 0; i < MAX_SPHERES; i++) {
-    const itemOffset = offset + (i * SPHERE_SIZE); // Calculate the start for this specific sphere
+    const itemOffset = offset + (i * SPHERE_SIZE);
 
-    if (i < data.num_spheres && data.spheres[i]) {
+    if (i < data.spheres.length) {
       const s = data.spheres[i];
+      // center: vec3<f32> (Offset 0, 4, 8)
       view.setFloat32(itemOffset + 0, s.center[0], true);
       view.setFloat32(itemOffset + 4, s.center[1], true);
       view.setFloat32(itemOffset + 8, s.center[2], true);
+      // radius: f32 (Offset 12)
       view.setFloat32(itemOffset + 12, s.radius, true);
+      // color: vec3<f32> (Offset 16, 20, 24)
       view.setFloat32(itemOffset + 16, s.color[0], true);
       view.setFloat32(itemOffset + 20, s.color[1], true);
       view.setFloat32(itemOffset + 24, s.color[2], true);
-      view.setFloat32(itemOffset + 28, 0, true); // Padding
-    } else {
-      for (let j = 0; j < SPHERE_SIZE; j += 4) view.setFloat32(itemOffset + j, 0, true);
+      // _padding: f32 (Offset 28)
     }
   }
-
-  offset = SPHERE_SIZE * MAX_SPHERES; // offset is now 160
+  offset += SPHERE_SIZE * MAX_SPHERES; // CRITICAL: Advance offset
 
   // 2. BOXES (3 * 48 bytes = 144 bytes total)
   for (let i = 0; i < MAX_BOXES; i++) {
-    const itemOffset = offset + (i * BOX_SIZE); // Calculate the start for this specific box
+    const itemOffset = offset + (i * BOX_SIZE);
 
-    if (i < data.num_boxes && data.boxes[i]) {
+    if (i < data.boxes.length) {
       const b = data.boxes[i];
+      // center: vec3<f32> (Offset 0, 4, 8)
       view.setFloat32(itemOffset + 0, b.center[0], true);
       view.setFloat32(itemOffset + 4, b.center[1], true);
       view.setFloat32(itemOffset + 8, b.center[2], true);
-      view.setFloat32(itemOffset + 12, 0, true); // Padding 1
+      // _padding1: f32 (Offset 12)
+      // size: vec3<f32> (Offset 16, 20, 24)
       view.setFloat32(itemOffset + 16, b.size[0], true);
       view.setFloat32(itemOffset + 20, b.size[1], true);
       view.setFloat32(itemOffset + 24, b.size[2], true);
-      view.setFloat32(itemOffset + 28, 0, true); // Padding 2
+      // _padding2: f32 (Offset 28)
+      // color: vec3<f32> (Offset 32, 36, 40)
       view.setFloat32(itemOffset + 32, b.color[0], true);
       view.setFloat32(itemOffset + 36, b.color[1], true);
       view.setFloat32(itemOffset + 40, b.color[2], true);
-      view.setFloat32(itemOffset + 44, 0, true); // Padding 3
-    } else {
-      for (let j = 0; j < BOX_SIZE; j += 4) view.setFloat32(itemOffset + j, 0, true);
+      // _padding3: f32 (Offset 44)
     }
   }
-  offset += BOX_SIZE * MAX_BOXES; // offset is now 160 + 144 = 304
+  offset += BOX_SIZE * MAX_BOXES; // CRITICAL: Advance offset
 
-  for (let i = 0; i < MAX_PLANES; i++) {
-    if (i < data.num_planes && data.planes[i]) {
-      const p = data.planes[i];
+  for (let i = 0; i < MAX_TORUS; i++) {
 
-      // FIXED: Plane structure matches shader definition
-      // Layout: normal (vec3), distance (f32), padding, color (vec3), padding
-      view.setFloat32(offset + 0, p.normal[0], true);  // Normal X
-      view.setFloat32(offset + 4, p.normal[1], true);  // Normal Y
-      view.setFloat32(offset + 8, p.normal[2], true);  // Normal Z
-      view.setFloat32(offset + 12, p.distance, true);  // Distance from origin
-      view.setFloat32(offset + 16, 0, true); // Padding
-      view.setFloat32(offset + 20, 0, true); // Padding
-      view.setFloat32(offset + 24, 0, true); // Padding
-      view.setFloat32(offset + 28, 0, true); // Padding
-      view.setFloat32(offset + 32, p.color[0], true); // Color R
-      view.setFloat32(offset + 36, p.color[1], true); // Color G
-      view.setFloat32(offset + 40, p.color[2], true); // Color B
-      view.setFloat32(offset + 44, 0, true); // Padding
+    const itemOffset = offset + i * TORUS_SIZE;
+
+    if (i < data.num_torus && data.torus[i]) {
+        const t = data.torus[i];
+
+        view.setFloat32(itemOffset + 0, t.center[0], true);
+        view.setFloat32(itemOffset + 4, t.center[1], true);
+        view.setFloat32(itemOffset + 8, t.center[2], true);
+        view.setFloat32(itemOffset + 12, t.major_radius, true);
+        view.setFloat32(itemOffset + 16, t.minor_radius, true);
+
+        view.setFloat32(itemOffset + 32, t.color[0], true);
+        view.setFloat32(itemOffset + 36, t.color[1], true);
+        view.setFloat32(itemOffset + 40, t.color[2], true);
+
     } else {
-      // Zero out unused plane slots
-      for (let j = 0; j < PLANE_SIZE; j += 4) {
-        view.setFloat32(offset + j, 0, true);
-      }
+        // zero-fill the torus struct
+        for (let j = 0; j < TORUS_SIZE; j += 4) {
+            view.setFloat32(itemOffset + j, 0, true);
+        }
     }
-    offset += PLANE_SIZE;
   }
+  offset += TORUS_SIZE * MAX_TORUS;  // correct placement
 
-  // 4. HEADER (16 bytes total)
-  // Starts at offset 352. SCENE_SIZE is 368.
 
+// 3. PLANS (2 * 48 bytes = 96 bytes total)
+  for (let i = 0; i < MAX_PLANS; i++) {
+    const itemOffset = offset + (i * PLAN_SIZE);
+
+    if (i < data.plans.length) {
+        const p = data.plans[i];
+
+        view.setFloat32(itemOffset + 0, p.normal[0], true);
+        view.setFloat32(itemOffset + 4, p.normal[1], true);
+        view.setFloat32(itemOffset + 8, p.normal[2], true);
+
+        view.setFloat32(itemOffset + 12, p.distance, true);
+
+        view.setFloat32(itemOffset + 32, p.color[0], true);
+        view.setFloat32(itemOffset + 36, p.color[1], true);
+        view.setFloat32(itemOffset + 40, p.color[2], true);
+    }
+  }
+  offset += PLAN_SIZE * MAX_PLANS;
+
+  // 5. SCENE HEADER (16 bytes total) - This is where the error occurred before
   view.setUint32(offset + 0, data.num_spheres, true);
   view.setUint32(offset + 4, data.num_boxes, true);
-  view.setUint32(offset + 8, data.num_planes, true);
-  view.setUint32(offset + 12, 0, true); // Padding (u32)
-
-  // offset += SCENE_HEADER_SIZE; // Not strictly necessary since we return buffer
+  view.setUint32(offset + 8, data.num_plans, true);
+  view.setUint32(offset + 12, data.num_torus, true);
+  offset += SCENE_HEADER_SIZE;
 
   return buffer;
 }
@@ -195,20 +221,37 @@ function addBox() {
   console.log(`✅ Added box ${sceneData.num_boxes - 1}`);
 }
 
-function addPlane() {
-  if (sceneData.num_planes >= MAX_PLANES) {
-    alert(`Maximum ${MAX_PLANES} planes reached!`);
+function addPlan() {
+  if (sceneData.num_plans >= MAX_PLANS) {
+    alert(`Maximum ${MAX_PLANS} plans reached!`);
     return;
   }
-  sceneData.planes.push({
-    normal: [0, 1, 0],    // Pointing up (horizontal plane)
+  sceneData.plans.push({
+    normal: [0, 1, 0],    // Pointing up (horizontal plan)
     distance: 0,          // At origin height
     color: [0.5, 0.5, 0.5] // Gray
   });
-  sceneData.num_planes++;
+  sceneData.num_plans++;
   updateScene();
   updateSceneUI();
-  console.log(`✅ Added plane ${sceneData.num_planes - 1}`);
+  console.log(`✅ Added plan ${sceneData.num_plans - 1}`);
+}
+
+function addTorus() {
+  if (sceneData.num_torus >= MAX_TORUS) {
+    alert(`Maximum ${MAX_TORUS} torus reached!`);
+    return;
+  }
+  sceneData.torus.push({
+    center: [0.0, 0.5, 0.0],    // Pointing up (horizontal plan)
+    major_radius: 1,
+    minor_radius: 0.3,
+    color: [Math.random(), Math.random(), Math.random()] // Gray
+  });
+  sceneData.num_torus++;
+  updateScene();
+  updateSceneUI();
+  console.log(`✅ Added torus ${sceneData.num_torus - 1}`);
 }
 
 function removeSphere(index) {
@@ -230,22 +273,34 @@ function removeBox(index) {
   }
 }
 
-function removePlane(index) {
-  if (index >= 0 && index < sceneData.num_planes) {
-    sceneData.planes.splice(index, 1);
-    sceneData.num_planes--;
+function removePlan(index) {
+  if (index >= 0 && index < sceneData.num_plans) {
+    sceneData.plans.splice(index, 1);
+    sceneData.num_plans--;
     updateScene();
     updateSceneUI();
-    console.log(`Removed plane ${index}`);
+    console.log(`Removed plan ${index}`);
+  }
+}
+
+function removeTorus(index) {
+  if (index >= 0 && index < sceneData.num_torus) {
+    sceneData.torus.splice(index, 1);
+    sceneData.num_torus--;
+    updateScene();
+    updateSceneUI();
+    console.log(`Removed torus ${index}`);
   }
 }
 
 window.addSphere = addSphere;
 window.addBox = addBox;
-window.addPlane = addPlane;
+window.addPlan = addPlan;
+window.addTorus = addTorus;
 window.removeSphere = removeSphere;
 window.removeBox = removeBox;
-window.removePlane = removePlane;
+window.removePlan = removePlan;
+window.removeTorus = removeTorus;
 
 // --------------------------------------------
 // CODEMIRROR (simple mode for wgsl)
@@ -574,13 +629,26 @@ function updateSceneUI() {
     </div>`);
   }
 
-  for (let i = 0; i < sceneData.num_planes; i++) {
-    const p = sceneData.planes[i];
+
+  //plans
+  for (let i = 0; i < sceneData.num_plans; i++) {
+    const p = sceneData.plans[i];
     const hex = rgbToHex(p.color);
-    parts.push(`<div class="flex items-center gap-2 p-2 bg-[#1d2021] rounded hover:bg-[#32302f] transition-colors row" data-type="plane" data-index="${i}">
+    parts.push(`<div class="flex items-center gap-2 p-2 bg-[#1d2021] rounded hover:bg-[#32302f] transition-colors row" data-type="plan" data-index="${i}">
       <div class="w-3 h-0.5" style="background: ${hex}"></div>
-      <span class="text-xs flex-1">Plane ${i}</span>
-      <button data-remove="plane-${i}" class="text-xs text-red-400 hover:text-red-300">✕</button>
+      <span class="text-xs flex-1">Plan ${i}</span>
+      <button data-remove="plan-${i}" class="text-xs text-red-400 hover:text-red-300">✕</button>
+    </div>`);
+  }
+
+  //torus
+  for (let i = 0; i < sceneData.num_torus; i++) {
+    const t = sceneData.torus[i];
+    const hex = rgbToHex(t.color);
+    parts.push(`<div class="flex items-center gap-2 p-2 bg-[#1d2021] rounded hover:bg-[#32302f] transition-colors row" data-type="torus" data-index="${i}">
+      <div class="w-3 h-3 rounded-full" style="background: ${hex}"></div>
+      <span class="text-xs flex-1">Torus ${i}</span>
+      <button data-remove="torus-${i}" class="text-xs text-red-400 hover:text-red-300">✕</button>
     </div>`);
   }
 
@@ -610,7 +678,10 @@ function updateSceneUI() {
         } else if (removeKey.startsWith('box-')) {
           const i = Number(removeKey.split('-')[1]);
           removeBox(i);
-        }else if (removeKey.startsWith('plane-')) removePlane(Number(removeKey.split('-')[1]));
+        } else if (removeKey.startsWith('torus-')) {
+          const i = Number(removeKey.split('-')[1]);
+          removeTorus(i);
+        }else if (removeKey.startsWith('plan-')) removePlan(Number(removeKey.split('-')[1]));
         selectObject('none', -1);
       };
     }
@@ -620,7 +691,9 @@ function updateSceneUI() {
   if (selected.type === 'none') {
     if (sceneData.num_spheres > 0) selectObject('sphere', 0);
     else if (sceneData.num_boxes > 0) selectObject('box', 0);
-    else if (sceneData.num_planes > 0) selectObject('plane', 0);
+    else if (sceneData.num_torus > 0) selectObject('torus', 0);
+    else if (sceneData.num_plans > 0) selectObject('plan', 0);
+
   }
 }
 
@@ -638,6 +711,8 @@ function selectObject(type, index) {
 
   // --- toggle sliders ---
   const radiusSlider = $("slider-radius");
+  const min_radSlier = $("slider-min_rad");
+  const maj_radSlider = $("slider-maj_rad");
   const distanceSlider = $("slider-dist");
   const longSlider   = $("slider-long");
   const widthSlider  = $("slider-width");
@@ -645,6 +720,8 @@ function selectObject(type, index) {
 
   if (type === 'sphere') {
     if (radiusSlider) radiusSlider.style.display = 'flex';
+    if (min_radSlier) min_radSlier.style.display = 'none';
+    if (maj_radSlider) maj_radSlider.style.display = 'none';
     if (distanceSlider) distanceSlider.style.display = 'none';
     if (longSlider) longSlider.style.display = 'none';
     if (widthSlider) widthSlider.style.display = 'none';
@@ -665,6 +742,8 @@ function selectObject(type, index) {
 
   } else if (type === 'box') {
     if (radiusSlider) radiusSlider.style.display = 'none';
+    if (min_radSlier) min_radSlier.style.display = 'none';
+    if (maj_radSlider) maj_radSlider.style.display = 'none';
     if (distanceSlider) distanceSlider.style.display = 'none';
     if (longSlider) longSlider.style.display = 'flex';
     if (widthSlider) widthSlider.style.display = 'flex';
@@ -687,17 +766,19 @@ function selectObject(type, index) {
     $("val-height").textContent = Number(b.size[2]).toFixed(1);
     $("input-color").value = rgbToHex(b.color);
 
-  } else if (type === 'plane') {
+  } else if (type === 'plan') {
 
     if (radiusSlider) radiusSlider.style.display = 'none';
+    if (min_radSlier) min_radSlier.style.display = 'none';
+    if (maj_radSlider) maj_radSlider.style.display = 'none';
     if (distanceSlider) distanceSlider.style.display = 'flex';
     if (longSlider) longSlider.style.display = 'none';
     if (widthSlider) widthSlider.style.display = 'none';
     if (heightSlider) heightSlider.style.display = 'none';
 
-    const p = sceneData.planes[index];
+    const p = sceneData.plans[index];
     if (!p) { if (info) info.textContent = 'Editing: none'; return; }
-    if (info) info.textContent = `Editing: Plane [${index}]`;
+    if (info) info.textContent = `Editing: Plan [${index}]`;
     $("input-pos-x").value = p.normal[0];
     $("val-pos-x").textContent = Number(p.normal[0]).toFixed(1);
     $("input-pos-y").value = p.normal[1];
@@ -707,6 +788,38 @@ function selectObject(type, index) {
     $("input-dist").value = p.distance;
     $("val-dist").textContent = Number(p.distance).toFixed(1);
     $("input-color").value = rgbToHex(p.color);
+
+  } else if (type === 'torus') {
+
+    radiusSlider.style.display = 'none';
+    min_radSlier.style.display = 'flex';
+    maj_radSlider.style.display = 'flex';
+    distanceSlider.style.display = 'none';
+    longSlider.style.display = 'none';
+    widthSlider.style.display = 'none';
+    heightSlider.style.display = 'none';
+
+    const t = sceneData.torus[index];
+    if (!t) { info.textContent = 'Editing: none'; return; }
+
+    info.textContent = `Editing: Torus [${index}]`;
+
+    $("input-pos-x").value = t.center[0];
+    $("val-pos-x").textContent = Number(t.center[0]).toFixed(1);
+
+    $("input-pos-y").value = t.center[1];
+    $("val-pos-y").textContent = Number(t.center[1]).toFixed(1);
+
+    $("input-pos-z").value = t.center[2];
+    $("val-pos-z").textContent = Number(t.center[2]).toFixed(1);
+
+    $("input-min_rad").value = t.minor_radius;
+    $("val-min_rad").textContent = Number(t.minor_radius).toFixed(1);
+
+    $("input-maj_rad").value = t.major_radius;
+    $("val-maj_rad").textContent = Number(t.major_radius).toFixed(1);
+
+    $("input-color").value = rgbToHex(t.color);
 
   } else {
     // fallback
@@ -737,11 +850,15 @@ window.selectObject = selectObject;
   const iwidth = $("input-width");
   const iheight = $("input-height");
   const idist = $("input-dist");
+  const imajrad = $("input-maj_rad");
+  const iminrad = $("input-min_rad");
   const ic = $("input-color");
   const vpx = $("val-pos-x");
   const vpy = $("val-pos-y");
   const vpz = $("val-pos-z");
-  const vrad=$("val-rad");
+  const vrad= $("val-rad");
+  const vmajrad = $("val-maj_rad");
+  const vminrad = $("val-min_rad");
   const vlong = $("val-long");
   const vwidth = $("val-width");
   const vheight = $("val-height");
@@ -764,8 +881,11 @@ window.selectObject = selectObject;
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].center[0] = parseFloat(ipx.value);
       writeAndRefresh();
-    } else if (selected.type === 'plane' && sceneData.planes[selected.index]) {
-      sceneData.planes[selected.index].normal[0] = parseFloat(ipx.value); // CHANGED to .normal[0]
+    } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+      sceneData.torus[selected.index].center[0] = parseFloat(ipx.value); // CHANGED to .normal[0]
+      writeAndRefresh();
+    } else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+      sceneData.plans[selected.index].normal[0] = parseFloat(ipx.value); // CHANGED to .normal[0]
       writeAndRefresh();
     }
   };
@@ -779,8 +899,12 @@ window.selectObject = selectObject;
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].center[1] = invertedY;
       writeAndRefresh();
-    } else if (selected.type === 'plane' && sceneData.planes[selected.index]) {
-      sceneData.planes[selected.index].normal[1] = invertedY; // CHANGED to .normal[1]
+    } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+      sceneData.torus[selected.index].center[1] = invertedY;
+      writeAndRefresh();
+
+    }else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+      sceneData.plans[selected.index].normal[1] = invertedY; // CHANGED to .normal[1]
       writeAndRefresh();
     }
   };
@@ -789,14 +913,16 @@ window.selectObject = selectObject;
     vpz.textContent = Number(ipz.value).toFixed(1);
     const invertedZ = parseFloat(ipz.value);
     if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
-      // Note: Center[2] is the Z-axis (forward/back)
       sceneData.spheres[selected.index].center[2] = invertedZ;
       writeAndRefresh();
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].center[2] = invertedZ;
       writeAndRefresh();
-    } else if (selected.type === 'plane' && sceneData.planes[selected.index]) {
-      sceneData.planes[selected.index].normal[2] = invertedZ; // CHANGED to .normal[2]
+    } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+      sceneData.torus[selected.index].center[2] = invertedZ;
+      writeAndRefresh();
+    } else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+      sceneData.plans[selected.index].normal[2] = invertedZ;
       writeAndRefresh();
     }
    };
@@ -806,6 +932,26 @@ window.selectObject = selectObject;
       vrad.textContent = Number(irad.value).toFixed(1);
       if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
         sceneData.spheres[selected.index].radius = parseFloat(irad.value);
+        writeAndRefresh();
+      }
+    };
+  }
+
+  if (iminrad && vminrad) {
+    iminrad.oninput = () => {
+      vminrad.textContent = Number(iminrad.value).toFixed(1);
+      if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+        sceneData.torus[selected.index].minor_radius = parseFloat(iminrad.value);
+        writeAndRefresh();
+      }
+    };
+  }
+
+  if (imajrad && vmajrad) {
+    imajrad.oninput = () => {
+      vmajrad.textContent = Number(imajrad.value).toFixed(1);
+      if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+        sceneData.torus[selected.index].major_radius = parseFloat(imajrad.value);
         writeAndRefresh();
       }
     };
@@ -845,8 +991,8 @@ window.selectObject = selectObject;
   if (idist && vdist) {
     idist.oninput = () => {
       vdist.textContent = Number(idist.value).toFixed(1);
-      if (selected.type === 'plane' && sceneData.planes[selected.index]) {
-        sceneData.planes[selected.index].distance = parseFloat(idist.value);
+      if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+        sceneData.plans[selected.index].distance = parseFloat(idist.value);
         writeAndRefresh();
       }
     };
@@ -861,9 +1007,13 @@ window.selectObject = selectObject;
       } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
         sceneData.boxes[selected.index].color = c;
         writeAndRefresh();
-      } else if (selected.type === 'plane' && sceneData.planes[selected.index]) {
-        sceneData.planes[selected.index].color = c;
+      } else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+        sceneData.plans[selected.index].color = c;
         writeAndRefresh();
+      } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
+        sceneData.torus[selected.index].color = c;
+        writeAndRefresh();
+
       }
     };
   }

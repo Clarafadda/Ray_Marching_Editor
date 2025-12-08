@@ -1,3 +1,5 @@
+
+
 // ============================================
 // SIGNED DISTANCE FUNCTIONS
 // ============================================
@@ -11,9 +13,15 @@ fn sdBox(p: vec3<f32>, center: vec3<f32>, size: vec3<f32>) -> f32 {
     return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
-fn sdPlane(p: vec3<f32>, normal: vec3<f32>, distance: f32) -> f32 {
+fn sdTorus(p: vec3<f32>, t: vec2<f32>) -> f32 {
+    let q = vec2<f32>(length(p.xz) - t.x, p.y);
+    return length(q) - t.y;
+}
+
+fn sdPlan(p: vec3<f32>, normal: vec3<f32>, distance: f32) -> f32 {
     return dot(p, normal) + distance;
 }
+
 
 
 // ============================================
@@ -24,7 +32,7 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
     var minDist = 1000.0;
     var matID = 0.0;
 
-    // Tester toutes les sphères
+    // Test all spheres
     for (var i = 0u; i < scene.num_spheres; i++) {
         let sphere = scene.spheres[i];
         let dist = sdSphere(p, sphere.center, sphere.radius);
@@ -34,7 +42,7 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
         }
     }
 
-    // Tester toutes les boxes (offset de 100 pour les distinguer)
+    // Test all boxes (offset 100 to distinguish)
     for (var i = 0u; i < scene.num_boxes; i++) {
         let box = scene.boxes[i];
         let dist = sdBox(p, box.center, box.size);
@@ -44,16 +52,27 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
         }
     }
 
-    for (var i = 0u; i < scene.num_planes; i++) {
-        let plane = scene.planes[i];
-        let dist = sdPlane(p, plane.normal, plane.distance);
+    // Test all plans (offset 200)
+    for (var i = 0u; i < scene.num_plans; i++) {
+        let plan = scene.plans[i];
+        let dist = sdPlan(p, plan.normal, plan.distance);
         if (dist < minDist) {
             minDist = dist;
             matID = f32(i) + 200.0;
         }
     }
 
-
+    // Test all torus (offset 300)
+    for (var i = 0u; i < scene.num_torus; i++) {
+        let torus = scene.torus[i];
+        let p_local = p - torus.center;
+        let radii = vec2<f32>(torus.major_radius, torus.minor_radius);
+        let dist = sdTorus(p_local, radii);
+        if (dist < minDist) {
+            minDist = dist;
+            matID = f32(i) + 300.0;
+        }
+    }
 
     return vec2<f32>(minDist, matID);
 }
@@ -73,18 +92,20 @@ fn getMaterialColor(matID: f32) -> vec3<f32> {
         if (i < scene.num_boxes) {
             return scene.boxes[i].color;
         }
-    }
-
-    else if (matID < 300.0) {
+    } else if (matID < 300.0) {
         let i = u32(matID - 200.0);
-        if (i < scene.num_planes) {
-            return scene.planes[i].color;
+        if (i < scene.num_plans) {
+            return scene.plans[i].color;
+        }
+    } else if (matID < 400.0) {
+        let i = u32(matID - 300.0);
+        if (i < scene.num_torus) {
+            return scene.torus[i].color;
         }
     }
 
     return vec3<f32>(0.5, 0.5, 0.5);
 }
-
 
 // ============================================
 // NORMAL CALCULATION
@@ -129,11 +150,10 @@ fn rayMarch(ro: vec3<f32>, rd: vec3<f32>) -> vec2<f32> {
 }
 
 // ============================================
-// SHADING (Kept from your current code)
+// SHADING
 // ============================================
 
 fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
-
     let normal = calcNormal(p);
     let lightDir = normalize(vec3<f32>(1.0, 1.0, 1.0));
 
@@ -153,38 +173,37 @@ fn shade(p: vec3<f32>, rd: vec3<f32>, matID: f32) -> vec3<f32> {
 }
 
 // ============================================
-// FRAGMENT SHADER (Uses the camera setup from raymarch_basic.wgsl)
+// FRAGMENT SHADER
 // ============================================
 
 @fragment
 fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
     // 1. Normalized UV coordinates [-1, 1]
-    // Use min(res.x, res.y) for aspect ratio correction, matching raymarch_basic
-    let uv = vec2<f32>((fragCoord.x - uniforms.resolution.x * 0.5),-(fragCoord.y - uniforms.resolution.y * 0.5)) / min(uniforms.resolution.x, uniforms.resolution.y);
+    let uv = vec2<f32>(
+        (fragCoord.x - uniforms.resolution.x * 0.5),
+        -(fragCoord.y - uniforms.resolution.y * 0.5)
+    ) / min(uniforms.resolution.x, uniforms.resolution.y);
 
+    // 2. Orbital Camera Setup
+    let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y) * 3.0, 0.05, 1.5);
+    let yaw = uniforms.time * 0.5;
 
-    // 2. Orbital Camera Setup (from raymarch_basic.wgsl)
-
-    // Pitch/Yaw setup: uses time for rotation and mouse for pitch control
-    let pitch = clamp((uniforms.mouse.y / uniforms.resolution.y) * 3.0, 0.05, 1.5); // 0.05 to 1.5 radians
-    let yaw = uniforms.time * 0.5; // Auto-orbits around the center
-
-    // Camera Coords
+    // Camera positioning
     let cam_dist = 4.0;
     let cam_target = vec3<f32>(0.0, 0.0, 0.0);
-    // Calculate cam_pos on the orbit
-    let cam_pos = vec3<f32>(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * cam_dist;
+    let cam_pos = vec3<f32>(
+        sin(yaw) * cos(pitch),
+        sin(pitch),
+        cos(yaw) * cos(pitch)
+    ) * cam_dist;
 
-    // 3. Camera Matrix (Ray Direction setup)
-    // Create the coordinate system based on camera position and target
+    // 3. Camera Matrix
     let cam_forward = normalize(cam_target - cam_pos);
     let cam_right = normalize(cross(cam_forward, vec3<f32>(0.0, 1.0, 0.0)));
-    let cam_up = cross(cam_right, cam_forward); // Re-orthogonalized up
+    let cam_up = cross(cam_right, cam_forward);
 
     // Ray Direction
     let focal_length = 1.5;
-    // Note: The sign for cam_up * uv.y is inverted here to match the common
-    // raymarching convention (Y up is positive screen Y, not inverted like some APIs)
     let rd = normalize(cam_right * uv.x + cam_up * uv.y + cam_forward * focal_length);
 
     // 4. Ray Marching
@@ -199,7 +218,7 @@ fn fs_main(@builtin(position) fragCoord: vec4<f32>) -> @location(0) vec4<f32> {
         let p = ro + rd * t;
         color = shade(p, rd, matID);
     } else {
-        // Sky Background (Simple dark gradient)
+        // Sky Background
         color = vec3<f32>(0.1, 0.1, 0.15) * (1.0 - uv.y * 0.5);
     }
 
