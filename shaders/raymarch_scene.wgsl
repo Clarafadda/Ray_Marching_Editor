@@ -20,13 +20,6 @@ fn sdPlane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
     return dot(p, normalize(n)) + h;
 }
 
-/*fn op_smooth_union(d1: f32, d2: f32, k: f32) -> f32 {
-    // avoid division by zero
-    let kk = max(k, 0.0001);
-
-    let h = clamp(0.5 + 0.5 * (d2 - d1) / kk, 0.0, 1.0);
-    return mix(d2, d1, h) - kk * h * (1.0 - h);
-}*/
 
 fn smoothUnionSDF(d1: f32, mat1: f32, d2: f32, mat2: f32, k: f32) -> vec2<f32> {
     let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
