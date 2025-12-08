@@ -20,58 +20,75 @@ fn sdPlane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
     return dot(p, normalize(n)) + h;
 }
 
+/*fn op_smooth_union(d1: f32, d2: f32, k: f32) -> f32 {
+    // avoid division by zero
+    let kk = max(k, 0.0001);
+
+    let h = clamp(0.5 + 0.5 * (d2 - d1) / kk, 0.0, 1.0);
+    return mix(d2, d1, h) - kk * h * (1.0 - h);
+}*/
+
+fn smoothUnionSDF(d1: f32, mat1: f32, d2: f32, mat2: f32, k: f32) -> vec2<f32> {
+    let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
+    let d = mix(d2, d1, h) - k * h * (1.0 - h);
+    let mat = select(mat1, mat2, d2 < d1);
+    return vec2<f32>(d, mat);
+}
+
+
+
+
 // ============================================
 // SCENE SDF
 // ============================================
 
+// Scene SDF with smooth unions
 fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
-    var minDist = 1000.0;
-    var matID = 0.0;
+    var minDist: f32 = 1000.0;
+    var matID: f32 = 0.0;
+    let k: f32 = 0.3; // smoothness factor
 
     // Spheres
-    for (var i = 0u; i < scene.num_spheres; i++) {
+    for (var i = 0u; i < scene.num_spheres; i = i + 1u) {
         let s = scene.spheres[i];
         let d = sdSphere(p, s.center, s.radius);
-        if (d < minDist) {
-            minDist = d;
-            matID = f32(i);
-        }
+        let result = smoothUnionSDF(minDist, matID, d, f32(i), k);
+        minDist = result.x;
+        matID = result.y;
     }
 
     // Boxes (offset +100)
-    for (var i = 0u; i < scene.num_boxes; i++) {
+    for (var i = 0u; i < scene.num_boxes; i = i + 1u) {
         let b = scene.boxes[i];
         let d = sdBox(p, b.center, b.size);
-        if (d < minDist) {
-            minDist = d;
-            matID = f32(i) + 100.0;
-        }
+        let result = smoothUnionSDF(minDist, matID, d, f32(i) + 100.0, k);
+        minDist = result.x;
+        matID = result.y;
     }
 
     // Planes (offset +200)
-    for (var i = 0u; i < scene.num_plans; i++) {
+    for (var i = 0u; i < scene.num_plans; i = i + 1u) {
         let pl = scene.plans[i];
         let d = sdPlane(p, pl.normal, pl.distance);
-        if (d < minDist) {
-            minDist = d;
-            matID = f32(i) + 200.0;
-        }
+        let result = smoothUnionSDF(minDist, matID, d, f32(i) + 200.0, k);
+        minDist = result.x;
+        matID = result.y;
     }
 
     // Torus (offset +300)
-    for (var i = 0u; i < scene.num_torus; i++) {
+    for (var i = 0u; i < scene.num_torus; i = i + 1u) {
         let t = scene.torus[i];
         let p_local = p - t.center;
-        let rad = vec2<f32>(t.major_radius, t.minor_radius);
-        let d = sdTorus(p_local, rad);
-        if (d < minDist) {
-            minDist = d;
-            matID = f32(i) + 300.0;
-        }
+        let d = sdTorus(p_local, vec2<f32>(t.major_radius, t.minor_radius));
+        let result = smoothUnionSDF(minDist, matID, d, f32(i) + 300.0, k);
+        minDist = result.x;
+        matID = result.y;
     }
 
     return vec2<f32>(minDist, matID);
 }
+
+
 
 // ============================================
 // MATERIAL COLOR
