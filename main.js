@@ -7,12 +7,18 @@
 // --------------------------------------------
 const MAX_SPHERES = 5;
 const MAX_BOXES = 3;
+const MAX_PLANES = 2;
 
 const SPHERE_SIZE = 32;
 const BOX_SIZE = 48;
 const PLANE_SIZE = 48;
 const SCENE_HEADER_SIZE = 16;
-const SCENE_SIZE = (SPHERE_SIZE * 5) + (BOX_SIZE * 3) + PLANE_SIZE + SCENE_HEADER_SIZE;
+
+const SCENE_SIZE =
+  (SPHERE_SIZE * MAX_SPHERES) +
+  (BOX_SIZE * MAX_BOXES)  +
+  (PLANE_SIZE * MAX_PLANES) +
+  SCENE_HEADER_SIZE;
 
 // --------------------------------------------
 // SCENE DATA BUFFER
@@ -20,16 +26,11 @@ const SCENE_SIZE = (SPHERE_SIZE * 5) + (BOX_SIZE * 3) + PLANE_SIZE + SCENE_HEADE
 const sceneData = {
   spheres: [],
   boxes: [],
-  plane: {
-    center: [0.0, 0.0, 0.0], // A point on the plane
-    normal: [0.0, 1.0, 0.0], // Normal vector (pointing Up: Y-axis)
-    color: [0.2, 0.2, 0.2]   // Base color
-    // We don't need 'height' here, we calculate it in the shader based on center/normal
-  },
+  planes: [],
 
   num_spheres: 0,
   num_boxes: 0,
-  num_planes: 1
+  num_planes: 0
 };
 
 function createSceneArrayBuffer(data) {
@@ -82,23 +83,32 @@ function createSceneArrayBuffer(data) {
   }
   offset += BOX_SIZE * MAX_BOXES; // offset is now 160 + 144 = 304
 
-  // 3. PLANE (1 * 48 bytes = 48 bytes total)
-  if (data.num_planes > 0 && data.plane) {
-    const p = data.plane;
-    view.setFloat32(offset + 0, p.center[0], true);
-    view.setFloat32(offset + 4, p.center[1], true);
-    view.setFloat32(offset + 8, p.center[2], true);
-    view.setFloat32(offset + 12, 0, true); // Padding 1 (f32)
-    view.setFloat32(offset + 16, p.normal[0], true);
-    view.setFloat32(offset + 20, p.normal[1], true);
-    view.setFloat32(offset + 24, p.normal[2], true);
-    view.setFloat32(offset + 28, 0, true); // Padding 2 (f32)
-    view.setFloat32(offset + 32, p.color[0], true);
-    view.setFloat32(offset + 36, p.color[1], true);
-    view.setFloat32(offset + 40, p.color[2], true);
-    view.setFloat32(offset + 44, 0, true); // Padding 3 (f32)
+  for (let i = 0; i < MAX_PLANES; i++) {
+    if (i < data.num_planes && data.planes[i]) {
+      const p = data.planes[i];
+
+      // FIXED: Plane structure matches shader definition
+      // Layout: normal (vec3), distance (f32), padding, color (vec3), padding
+      view.setFloat32(offset + 0, p.normal[0], true);  // Normal X
+      view.setFloat32(offset + 4, p.normal[1], true);  // Normal Y
+      view.setFloat32(offset + 8, p.normal[2], true);  // Normal Z
+      view.setFloat32(offset + 12, p.distance, true);  // Distance from origin
+      view.setFloat32(offset + 16, 0, true); // Padding
+      view.setFloat32(offset + 20, 0, true); // Padding
+      view.setFloat32(offset + 24, 0, true); // Padding
+      view.setFloat32(offset + 28, 0, true); // Padding
+      view.setFloat32(offset + 32, p.color[0], true); // Color R
+      view.setFloat32(offset + 36, p.color[1], true); // Color G
+      view.setFloat32(offset + 40, p.color[2], true); // Color B
+      view.setFloat32(offset + 44, 0, true); // Padding
+    } else {
+      // Zero out unused plane slots
+      for (let j = 0; j < PLANE_SIZE; j += 4) {
+        view.setFloat32(offset + j, 0, true);
+      }
+    }
+    offset += PLANE_SIZE;
   }
-  offset += PLANE_SIZE; // offset is now 304 + 48 = 352
 
   // 4. HEADER (16 bytes total)
   // Starts at offset 352. SCENE_SIZE is 368.
@@ -184,6 +194,23 @@ function addBox() {
   updateSceneUI();
   console.log(`✅ Added box ${sceneData.num_boxes - 1}`);
 }
+
+function addPlane() {
+  if (sceneData.num_planes >= MAX_PLANES) {
+    alert(`Maximum ${MAX_PLANES} planes reached!`);
+    return;
+  }
+  sceneData.planes.push({
+    normal: [0, 1, 0],    // Pointing up (horizontal plane)
+    distance: 0,          // At origin height
+    color: [0.5, 0.5, 0.5] // Gray
+  });
+  sceneData.num_planes++;
+  updateScene();
+  updateSceneUI();
+  console.log(`✅ Added plane ${sceneData.num_planes - 1}`);
+}
+
 function removeSphere(index) {
   if (index >= 0 && index < sceneData.num_spheres) {
     sceneData.spheres.splice(index, 1);
@@ -202,10 +229,23 @@ function removeBox(index) {
     console.log(`Removed box ${index}`);
   }
 }
+
+function removePlane(index) {
+  if (index >= 0 && index < sceneData.num_planes) {
+    sceneData.planes.splice(index, 1);
+    sceneData.num_planes--;
+    updateScene();
+    updateSceneUI();
+    console.log(`Removed plane ${index}`);
+  }
+}
+
 window.addSphere = addSphere;
 window.addBox = addBox;
+window.addPlane = addPlane;
 window.removeSphere = removeSphere;
 window.removeBox = removeBox;
+window.removePlane = removePlane;
 
 // --------------------------------------------
 // CODEMIRROR (simple mode for wgsl)
@@ -361,12 +401,35 @@ async function initWebGPU() {
 // SHADER LOADING
 // --------------------------------------------
 async function loadInitialShaders() {
+  // 1. Define a standard Full-Screen Triangle vertex shader
+  const defaultVertexShader = `
+    struct VertexOutput {
+      @builtin(position) Position : vec4<f32>,
+      @location(0) uv : vec2<f32>,
+    }
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) VertexIndex : u32) -> VertexOutput {
+      var pos = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 3.0, -1.0),
+        vec2<f32>(-1.0,  3.0)
+      );
+
+      var output : VertexOutput;
+      output.Position = vec4<f32>(pos[VertexIndex], 0.0, 1.0);
+      output.uv = pos[VertexIndex] * 0.5 + 0.5;
+      return output;
+    }
+  `;
+
   try {
     const vertexResp = await fetch("./shaders/vertex.wgsl");
-    vertexShader = vertexResp.ok ? await vertexResp.text() : `@vertex fn vs_main() -> void {}`;
+    // Use the fetched text if successful, otherwise use the defaultVertexShader
+    vertexShader = vertexResp.ok ? await vertexResp.text() : defaultVertexShader;
   } catch (e) {
     console.error("vertex load:", e);
-    vertexShader = `@vertex fn vs_main() -> void {}`;
+    vertexShader = defaultVertexShader;
   }
 
   try {
@@ -511,6 +574,16 @@ function updateSceneUI() {
     </div>`);
   }
 
+  for (let i = 0; i < sceneData.num_planes; i++) {
+    const p = sceneData.planes[i];
+    const hex = rgbToHex(p.color);
+    parts.push(`<div class="flex items-center gap-2 p-2 bg-[#1d2021] rounded hover:bg-[#32302f] transition-colors row" data-type="plane" data-index="${i}">
+      <div class="w-3 h-0.5" style="background: ${hex}"></div>
+      <span class="text-xs flex-1">Plane ${i}</span>
+      <button data-remove="plane-${i}" class="text-xs text-red-400 hover:text-red-300">✕</button>
+    </div>`);
+  }
+
   if (parts.length === 0) {
     container.innerHTML = `<div class="text-xs text-gray-500 text-center py-4">No objects in scene<br>Click to add</div>`;
   } else {
@@ -537,7 +610,7 @@ function updateSceneUI() {
         } else if (removeKey.startsWith('box-')) {
           const i = Number(removeKey.split('-')[1]);
           removeBox(i);
-        }
+        }else if (removeKey.startsWith('plane-')) removePlane(Number(removeKey.split('-')[1]));
         selectObject('none', -1);
       };
     }
@@ -547,6 +620,7 @@ function updateSceneUI() {
   if (selected.type === 'none') {
     if (sceneData.num_spheres > 0) selectObject('sphere', 0);
     else if (sceneData.num_boxes > 0) selectObject('box', 0);
+    else if (sceneData.num_planes > 0) selectObject('plane', 0);
   }
 }
 
@@ -564,12 +638,14 @@ function selectObject(type, index) {
 
   // --- toggle sliders ---
   const radiusSlider = $("slider-radius");
+  const distanceSlider = $("slider-dist");
   const longSlider   = $("slider-long");
   const widthSlider  = $("slider-width");
   const heightSlider = $("slider-height");
 
   if (type === 'sphere') {
     if (radiusSlider) radiusSlider.style.display = 'flex';
+    if (distanceSlider) distanceSlider.style.display = 'none';
     if (longSlider) longSlider.style.display = 'none';
     if (widthSlider) widthSlider.style.display = 'none';
     if (heightSlider) heightSlider.style.display = 'none';
@@ -589,6 +665,7 @@ function selectObject(type, index) {
 
   } else if (type === 'box') {
     if (radiusSlider) radiusSlider.style.display = 'none';
+    if (distanceSlider) distanceSlider.style.display = 'none';
     if (longSlider) longSlider.style.display = 'flex';
     if (widthSlider) widthSlider.style.display = 'flex';
     if (heightSlider) heightSlider.style.display = 'flex';
@@ -610,9 +687,31 @@ function selectObject(type, index) {
     $("val-height").textContent = Number(b.size[2]).toFixed(1);
     $("input-color").value = rgbToHex(b.color);
 
+  } else if (type === 'plane') {
+
+    if (radiusSlider) radiusSlider.style.display = 'none';
+    if (distanceSlider) distanceSlider.style.display = 'flex';
+    if (longSlider) longSlider.style.display = 'none';
+    if (widthSlider) widthSlider.style.display = 'none';
+    if (heightSlider) heightSlider.style.display = 'none';
+
+    const p = sceneData.planes[index];
+    if (!p) { if (info) info.textContent = 'Editing: none'; return; }
+    if (info) info.textContent = `Editing: Plane [${index}]`;
+    $("input-pos-x").value = p.normal[0];
+    $("val-pos-x").textContent = Number(p.normal[0]).toFixed(1);
+    $("input-pos-y").value = p.normal[1];
+    $("val-pos-y").textContent = Number(p.normal[1]).toFixed(1);
+    $("input-pos-z").value = p.normal[2];
+    $("val-pos-z").textContent = Number(p.normal[2]).toFixed(1);
+    $("input-dist").value = p.distance;
+    $("val-dist").textContent = Number(p.distance).toFixed(1);
+    $("input-color").value = rgbToHex(p.color);
+
   } else {
     // fallback
     if (radiusSlider) radiusSlider.style.display = 'flex';
+    if (distanceSlider) distanceSlider.style.display = 'flex';
     if (longSlider) longSlider.style.display = 'flex';
     if (widthSlider) widthSlider.style.display = 'flex';
     if (heightSlider) heightSlider.style.display = 'flex';
@@ -637,6 +736,7 @@ window.selectObject = selectObject;
   const ilong = $("input-long");
   const iwidth = $("input-width");
   const iheight = $("input-height");
+  const idist = $("input-dist");
   const ic = $("input-color");
   const vpx = $("val-pos-x");
   const vpy = $("val-pos-y");
@@ -645,6 +745,7 @@ window.selectObject = selectObject;
   const vlong = $("val-long");
   const vwidth = $("val-width");
   const vheight = $("val-height");
+  const vdist = $("val-dist");
 
   if (!ipx || !ipy || !ipz || !ilong || !iwidth || !iheight || !ic ||
     !vpx || !vpy || !vpz || !vlong || !vwidth || !vheight) return;
@@ -663,6 +764,9 @@ window.selectObject = selectObject;
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].center[0] = parseFloat(ipx.value);
       writeAndRefresh();
+    } else if (selected.type === 'plane' && sceneData.planes[selected.index]) {
+      sceneData.planes[selected.index].normal[0] = parseFloat(ipx.value); // CHANGED to .normal[0]
+      writeAndRefresh();
     }
   };
 
@@ -674,6 +778,9 @@ window.selectObject = selectObject;
       writeAndRefresh();
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].center[1] = invertedY;
+      writeAndRefresh();
+    } else if (selected.type === 'plane' && sceneData.planes[selected.index]) {
+      sceneData.planes[selected.index].normal[1] = invertedY; // CHANGED to .normal[1]
       writeAndRefresh();
     }
   };
@@ -687,6 +794,9 @@ window.selectObject = selectObject;
       writeAndRefresh();
     } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
       sceneData.boxes[selected.index].center[2] = invertedZ;
+      writeAndRefresh();
+    } else if (selected.type === 'plane' && sceneData.planes[selected.index]) {
+      sceneData.planes[selected.index].normal[2] = invertedZ; // CHANGED to .normal[2]
       writeAndRefresh();
     }
    };
@@ -732,12 +842,29 @@ window.selectObject = selectObject;
     };
   }
 
+  if (idist && vdist) {
+    idist.oninput = () => {
+      vdist.textContent = Number(idist.value).toFixed(1);
+      if (selected.type === 'plane' && sceneData.planes[selected.index]) {
+        sceneData.planes[selected.index].distance = parseFloat(idist.value);
+        writeAndRefresh();
+      }
+    };
+  }
+
   if (ic) {
     ic.oninput = () => {
       const c = hexToRgb(ic.value);
-      if (selected.type === 'sphere' && sceneData.spheres[selected.index]) sceneData.spheres[selected.index].color = c;
-      if (selected.type === 'box' && sceneData.boxes[selected.index]) sceneData.boxes[selected.index].color = c;
-      writeAndRefresh();
+      if (selected.type === 'sphere' && sceneData.spheres[selected.index]) {
+        sceneData.spheres[selected.index].color = c;
+        writeAndRefresh();
+      } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
+        sceneData.boxes[selected.index].color = c;
+        writeAndRefresh();
+      } else if (selected.type === 'plane' && sceneData.planes[selected.index]) {
+        sceneData.planes[selected.index].color = c;
+        writeAndRefresh();
+      }
     };
   }
 })();

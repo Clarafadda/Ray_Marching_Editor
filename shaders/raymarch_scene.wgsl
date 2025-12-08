@@ -11,8 +11,8 @@ fn sdBox(p: vec3<f32>, center: vec3<f32>, size: vec3<f32>) -> f32 {
     return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
 
-fn sd_plane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
-    return dot(p, n) + h;
+fn sdPlane(p: vec3<f32>, normal: vec3<f32>, distance: f32) -> f32 {
+    return dot(p, normal) + distance;
 }
 
 
@@ -44,18 +44,16 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
         }
     }
 
-    if (scene.num_planes > 0u) {
-        let plane = scene.plane; // Access the single struct
-
-        // Calculate 'h' for sd_plane: h = -dot(center, normal)
-        let n = normalize(plane.normal);
-        let h_param = -dot(plane.center, n);
-        let plane_dist = sd_plane(p, n, h_param);
-        if (plane_dist < minDist) {
-            minDist = plane_dist;
-            matID = 200.0; // Material ID for the plane
+    for (var i = 0u; i < scene.num_planes; i++) {
+        let plane = scene.planes[i];
+        let dist = sdPlane(p, plane.normal, plane.distance);
+        if (dist < minDist) {
+            minDist = dist;
+            matID = f32(i) + 200.0;
         }
     }
+
+
 
     return vec2<f32>(minDist, matID);
 }
@@ -77,8 +75,14 @@ fn getMaterialColor(matID: f32) -> vec3<f32> {
         }
     }
 
-    // Plane handled in shade()
-    return vec3<f32>(1.0, 1.0, 1.0);
+    else if (matID < 300.0) {
+        let i = u32(matID - 200.0);
+        if (i < scene.num_planes) {
+            return scene.planes[i].color;
+        }
+    }
+
+    return vec3<f32>(0.5, 0.5, 0.5);
 }
 
 
