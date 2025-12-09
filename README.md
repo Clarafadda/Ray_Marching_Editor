@@ -1,6 +1,7 @@
 # WebGPU Ray Marching Editor
 
-![App Screenshot](screen.png)  
+
+[![Cliquez pour voir la vidéo de démonstration](screen.png)]([https://youtu.be/yge2YFIpTds])
 
 ---
 <details>
