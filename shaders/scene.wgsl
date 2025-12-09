@@ -38,15 +38,15 @@ struct Torus {
 };*/
 
 struct Pyramid {
-    center: vec3<f32>, // 0-12
-    _pad1: f32,        // 12-16 (Padding to match JS writing height at 16)
-    h: f32,            // 16-20
-    _pad2: f32,        // 20-24
-    _pad3: f32,        // 24-28
-    _pad4: f32,        // 28-32
-    color: vec3<f32>,  // 32-44
-    _pad5: f32,        // 44-48
-}
+    center: vec3<f32>,
+    _padding0: f32,
+    base_size: vec2<f32>,
+    height: f32,
+    _padding1: f32,
+    color: vec3<f32>,
+    _padding2: f32,
+};
+
 
 struct SceneData {
     spheres: array<Sphere, 5>,

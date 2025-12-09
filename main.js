@@ -154,19 +154,25 @@ function createSceneArrayBuffer(data) {
       view.setFloat32(itemOffset + 0, p.center[0], true);
       view.setFloat32(itemOffset + 4, p.center[1], true);
       view.setFloat32(itemOffset + 8, p.center[2], true);
-      // _padding1: f32 (Offset 12)
+      // _padding (Offset 12)
 
-      // height: f32 (Offset 16)
-      view.setFloat32(itemOffset + 16, p.height, true);
-      // _padding2: f32 (Offset 20)
-      // _padding3: f32 (Offset 24)
-      // _padding4: f32 (Offset 28)
+      // base_size: vec2<f32> (Offset 16, 20)
+      view.setFloat32(itemOffset + 16, p.base_width, true);
+      view.setFloat32(itemOffset + 20, p.base_depth, true);
+
+      // height: f32 (Offset 24)
+      view.setFloat32(itemOffset + 24, p.height, true);
+      // _padding (Offset 28)
 
       // color: vec3<f32> (Offset 32, 36, 40)
       view.setFloat32(itemOffset + 32, p.color[0], true);
       view.setFloat32(itemOffset + 36, p.color[1], true);
       view.setFloat32(itemOffset + 40, p.color[2], true);
-      // _padding5: f32 (Offset 44)
+      // _padding (Offset 44)
+    } else {
+      for (let j = 0; j < PYRAMID_SIZE; j += 4) {
+        view.setFloat32(itemOffset + j, 0.0, true);
+      }
     }
   }
   offset += PYRAMID_SIZE * MAX_PYRAMIDS;
@@ -276,14 +282,16 @@ function addPyramid() {
     return;
   }
   sceneData.pyramids.push({
-    center: [0.0, 0.0, 0.0],
+    center: [0.0, 0.5, 0.0],  // Raised above ground (like sphere/box)
+    base_width: 1.0,
+    base_depth: 1.0,
     height: 1.0,
     color: [Math.random(), Math.random(), Math.random()]
   });
   sceneData.num_pyramids++;
   updateScene();
   updateSceneUI();
-  console.log(`✅ Added pyramid ${sceneData.num_pyramids - 1}`);
+  console.log(`✅ Added pyramid ${sceneData.num_pyramids - 1}`, sceneData.pyramids[sceneData.num_pyramids - 1]);
 }
 
 function addTorus() {
@@ -844,28 +852,37 @@ function selectObject(type, index) {
     $("input-color").value = rgbToHex(b.color);
 
     } else if (type === 'pyramid') {
-    // Show only height slider for pyramids
-    if (radiusSlider) radiusSlider.style.display = 'none';
-    if (min_radSlier) min_radSlier.style.display = 'none';
-    if (maj_radSlider) maj_radSlider.style.display = 'none';
-    //if (distanceSlider) distanceSlider.style.display = 'none';
-    if (longSlider) longSlider.style.display = 'none';
-    if (widthSlider) widthSlider.style.display = 'none';
-    if (heightSlider) heightSlider.style.display = 'flex';
+      if (radiusSlider) radiusSlider.style.display = 'none';
+      if (min_radSlier) min_radSlier.style.display = 'none';
+      if (maj_radSlider) maj_radSlider.style.display = 'none';
+      if (longSlider) longSlider.style.display = 'flex';
+      if (widthSlider) widthSlider.style.display = 'flex';
+      if (heightSlider) heightSlider.style.display = 'flex';
 
-    const p = sceneData.pyramids[index];
-    if (!p) { if (info) info.textContent = 'Editing: none'; return; }
-    if (info) info.textContent = `Editing: Pyramid [${index}]`;
+      const p = sceneData.pyramids[index];
+      if (!p) { if (info) info.textContent = 'Editing: none'; return; }
+      if (info) info.textContent = `Editing: Pyramid [${index}]`;
 
-    $("input-pos-x").value = p.center[0];
-    $("val-pos-x").textContent = Number(p.center[0]).toFixed(1);
-    $("input-pos-y").value = p.center[1];
-    $("val-pos-y").textContent = Number(p.center[1]).toFixed(1);
-    $("input-pos-z").value = p.center[2];
-    $("val-pos-z").textContent = Number(p.center[2]).toFixed(1);
-    $("input-height").value = p.height;
-    $("val-height").textContent = Number(p.height).toFixed(1);
-    $("input-color").value = rgbToHex(p.color);
+      $("input-pos-x").value = p.center[0];
+      $("val-pos-x").textContent = Number(p.center[0]).toFixed(1);
+      $("input-pos-y").value = p.center[1];
+      $("val-pos-y").textContent = Number(p.center[1]).toFixed(1);
+      $("input-pos-z").value = p.center[2];
+      $("val-pos-z").textContent = Number(p.center[2]).toFixed(1);
+
+      // Base Width (reusing 'long' slider)
+      $("input-long").value = p.base_width;
+      $("val-long").textContent = Number(p.base_width).toFixed(1);
+
+      // Base Depth (reusing 'width' slider)
+      $("input-width").value = p.base_depth;
+      $("val-width").textContent = Number(p.base_depth).toFixed(1);
+
+      // Height
+      $("input-height").value = p.height;
+      $("val-height").textContent = Number(p.height).toFixed(1);
+
+      $("input-color").value = rgbToHex(p.color);
 
   /*} else if (type === 'plan') {
 
@@ -1071,6 +1088,9 @@ window.selectObject = selectObject;
       if (selected.type === 'box' && sceneData.boxes[selected.index]) {
         sceneData.boxes[selected.index].size[0] = parseFloat(ilong.value);
         writeAndRefresh();
+      } else if (selected.type === 'pyramid' && sceneData.pyramids[selected.index]) {
+        sceneData.pyramids[selected.index].base_width = parseFloat(ilong.value);
+        writeAndRefresh();
       }
     };
   }
@@ -1081,11 +1101,13 @@ window.selectObject = selectObject;
       if (selected.type === 'box' && sceneData.boxes[selected.index]) {
         sceneData.boxes[selected.index].size[1] = parseFloat(iwidth.value);
         writeAndRefresh();
+      } else if (selected.type === 'pyramid' && sceneData.pyramids[selected.index]) {
+        sceneData.pyramids[selected.index].base_depth = parseFloat(iwidth.value);
+        writeAndRefresh();
       }
     };
   }
 
-  // Handler for Box Height (size[2])
   if (iheight && vheight) {
     iheight.oninput = () => {
       vheight.textContent = Number(iheight.value).toFixed(1);
