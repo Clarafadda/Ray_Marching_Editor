@@ -1,7 +1,9 @@
 # WebGPU Ray Marching Editor
 
 
-[![Cliquez pour voir la vidéo de démonstration](screen.png)]([https://youtu.be/yge2YFIpTds])
+### Click the image below to launch the demo video:
+
+[![Démonstration vidéo de l'éditeur](screen.png)](https://youtu.be/yge2YFIpTds)
 
 ---
 <details>
@@ -99,3 +101,5 @@ To run the project locally, you must use a local HTTP server due to WebGPU and b
 ## License
 
 This project is distributed under the MIT License. See the `LICENSE` file for more information.
+
+**Author:** Clara Fadda 
