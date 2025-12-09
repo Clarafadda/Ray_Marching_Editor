@@ -29,22 +29,35 @@ struct Torus {
     _pad3: f32,
 }
 
-struct Plan {
+/*struct Plan {
   normal: vec3<f32>,
   distance: f32,
   _padding1: vec4<f32>,
   color: vec3<f32>,
   _padding2: f32,
-};
+};*/
+
+struct Pyramid {
+    center: vec3<f32>, // 0-12
+    _pad1: f32,        // 12-16 (Padding to match JS writing height at 16)
+    h: f32,            // 16-20
+    _pad2: f32,        // 20-24
+    _pad3: f32,        // 24-28
+    _pad4: f32,        // 28-32
+    color: vec3<f32>,  // 32-44
+    _pad5: f32,        // 44-48
+}
 
 struct SceneData {
     spheres: array<Sphere, 5>,
     boxes: array<Box, 3>,
     torus: array<Torus, 3>,
-    plans: array<Plan, 2>,
+    pyramids: array<Pyramid, 3>,
+    //plans: array<Plan, 2>,
     num_spheres: u32,
     num_boxes: u32,
-    num_plans: u32,
+    //num_plans: u32,
+    num_pyramids: u32,
     num_torus: u32,
     _final_padding: vec4<f32>,
 }

@@ -16,9 +16,35 @@ fn sdTorus(p: vec3<f32>, t: vec2<f32>) -> f32 {
     return length(q) - t.y;
 }
 
-fn sdPlane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
-    return dot(p, normalize(n)) + h;
+fn sd_pyramid(p: vec3<f32>, h: f32) -> f32 {
+  var p_mod = p;
+  let m2 = h * h + 0.25;
+
+  // Symmetry
+  p_mod.x = abs(p_mod.x);
+  p_mod.z = abs(p_mod.z);
+  if (p_mod.z > p_mod.x) {
+      let tmp = p_mod.z; p_mod.z = p_mod.x; p_mod.x = tmp;
+  }
+  p_mod.x = p_mod.x - 0.5;
+  p_mod.z = p_mod.z - 0.5;
+
+  let q = vec3<f32>(p_mod.z, h * p_mod.y - 0.5 * p_mod.x, h * p_mod.x + 0.5 * p_mod.y);
+
+  let s = max(-q.x, 0.0);
+  let t = clamp((q.y - 0.5 * p_mod.z) / (m2 + 0.25), 0.0, 1.0);
+
+  let a = m2 * (q.x + s) * (q.x + s) + q.y * q.y;
+  let b = m2 * (q.x + 0.5 * t) * (q.x + 0.5 * t) + (q.y - m2 * t) * (q.y - m2 * t);
+
+  let d2 = select(min(a, b), 0.0, min(q.y, -q.x * m2 - q.y * 0.5) > 0.0);
+
+  return sqrt((d2 + q.z * q.z) / m2) * sign(max(q.z, -p_mod.y));
 }
+
+/*fn sdPlane(p: vec3<f32>, n: vec3<f32>, h: f32) -> f32 {
+    return dot(p, normalize(n)) + h;
+}*/
 
 
 fn smoothUnionSDF(d1: f32, mat1: f32, d2: f32, mat2: f32, k: f32) -> vec2<f32> {
@@ -66,14 +92,24 @@ fn sceneSDF(p: vec3<f32>) -> vec2<f32> {
         matID = result.y;
     }
 
-    // Planes (offset +200)
+
+    // 3. Pyramids (ID 200-299)
+    for (var i = 0u; i < scene.num_pyramids; i = i + 1u) {
+        let pyr = scene.pyramids[i];
+        let d = sd_pyramid(p - pyr.center, pyr.h);
+        let result = smoothUnionSDF(minDist, matID, d, f32(i) + 200.0, k);
+        minDist = result.x;
+        matID = result.y;
+    }
+
+    /*// Planes (offset +200)
     for (var i = 0u; i < scene.num_plans; i = i + 1u) {
         let pl = scene.plans[i];
         let d = sdPlane(p, pl.normal, pl.distance);
         let result = smoothUnionSDF(minDist, matID, d, f32(i) + 200.0, k);
         minDist = result.x;
         matID = result.y;
-    }
+    }*/
 
     // Torus (offset +300)
     for (var i = 0u; i < scene.num_torus; i = i + 1u) {
@@ -112,11 +148,18 @@ fn getMaterialColor(matID: f32) -> vec3<f32> {
         }
     }
 
-    // Planes 200–299
+    /*// Planes 200–299
     if (matID < 300.0) {
         let i = u32(matID - 200.0);
         if (i < scene.num_plans) {
             return scene.plans[i].color;
+        }
+    }*/
+
+    if (matID < 300.0) {
+        let i = u32(matID - 200.0);
+        if (i < scene.num_pyramids) {
+            return scene.pyramids[i].color;
         }
     }
 

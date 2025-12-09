@@ -8,13 +8,15 @@
 const MAX_SPHERES = 5;
 const MAX_BOXES = 3;
 const MAX_TORUS = 3;
-const MAX_PLANS = 2;
+const MAX_PYRAMIDS = 3;
+//const MAX_PLANS = 2;
 
 
 const SPHERE_SIZE = 32;
 const BOX_SIZE = 48;
 const TORUS_SIZE = 48;
-const PLAN_SIZE = 48;
+//const PLAN_SIZE = 48;
+const PYRAMID_SIZE = 48;
 const SCENE_HEADER_SIZE = 16;
 const FINAL_PADDING = 16;
 
@@ -22,7 +24,8 @@ const SCENE_SIZE =
   (SPHERE_SIZE * MAX_SPHERES) +
   (BOX_SIZE * MAX_BOXES)  +
   (TORUS_SIZE * MAX_TORUS) +
-  (PLAN_SIZE * MAX_PLANS) +
+  (PYRAMID_SIZE * MAX_PYRAMIDS) +
+  //(PLAN_SIZE * MAX_PLANS) +
   SCENE_HEADER_SIZE + FINAL_PADDING;
 
 console.log("✅ Correct SCENE_SIZE:", SCENE_SIZE, "bytes");
@@ -32,17 +35,19 @@ console.log("✅ Correct SCENE_SIZE:", SCENE_SIZE, "bytes");
 const sceneData = {
   spheres: [],
   boxes: [],
+  pyramids: [],
   torus: [],
-  plans: [{
+  /*plans: [{
     normal: [0, 1, 0],    // Pointing up
     distance: 0.5,        // Ground plane at y = -0.5
     color: [0.7, 0.7, 0.7] // Gray
-  }],
+  }],*/
 
   num_spheres: 0,
   num_boxes: 0,
+  num_pyramids: 0,
   num_torus: 0,
-  num_plans: 0
+  //num_plans: 0
 };
 
 function createSceneArrayBuffer(data) {
@@ -77,24 +82,20 @@ function createSceneArrayBuffer(data) {
 
     if (i < data.boxes.length) {
       const b = data.boxes[i];
-      // center: vec3<f32> (Offset 0, 4, 8)
       view.setFloat32(itemOffset + 0, b.center[0], true);
       view.setFloat32(itemOffset + 4, b.center[1], true);
       view.setFloat32(itemOffset + 8, b.center[2], true);
-      // _padding1: f32 (Offset 12)
-      // size: vec3<f32> (Offset 16, 20, 24)
+
       view.setFloat32(itemOffset + 16, b.size[0], true);
       view.setFloat32(itemOffset + 20, b.size[1], true);
       view.setFloat32(itemOffset + 24, b.size[2], true);
-      // _padding2: f32 (Offset 28)
-      // color: vec3<f32> (Offset 32, 36, 40)
+
       view.setFloat32(itemOffset + 32, b.color[0], true);
       view.setFloat32(itemOffset + 36, b.color[1], true);
       view.setFloat32(itemOffset + 40, b.color[2], true);
-      // _padding3: f32 (Offset 44)
     }
   }
-  offset += BOX_SIZE * MAX_BOXES; // CRITICAL: Advance offset
+  offset += BOX_SIZE * MAX_BOXES;
 
   for (let i = 0; i < MAX_TORUS; i++) {
 
@@ -123,7 +124,7 @@ function createSceneArrayBuffer(data) {
   offset += TORUS_SIZE * MAX_TORUS;  // correct placement
 
 
-// 3. PLANS (2 * 48 bytes = 96 bytes total)
+/*// 3. PLANS (2 * 48 bytes = 96 bytes total)
   for (let i = 0; i < MAX_PLANS; i++) {
     const itemOffset = offset + (i * PLAN_SIZE);
 
@@ -141,12 +142,40 @@ function createSceneArrayBuffer(data) {
         view.setFloat32(itemOffset + 40, p.color[2], true);
     }
   }
-  offset += PLAN_SIZE * MAX_PLANS;
+  offset += PLAN_SIZE * MAX_PLANS;*/
+
+    // 4. PYRAMIDS (3 * 48 bytes = 144 bytes total)
+  for (let i = 0; i < MAX_PYRAMIDS; i++) {
+    const itemOffset = offset + (i * PYRAMID_SIZE);
+
+    if (i < data.pyramids.length) {
+      const p = data.pyramids[i];
+      // center: vec3<f32> (Offset 0, 4, 8)
+      view.setFloat32(itemOffset + 0, p.center[0], true);
+      view.setFloat32(itemOffset + 4, p.center[1], true);
+      view.setFloat32(itemOffset + 8, p.center[2], true);
+      // _padding1: f32 (Offset 12)
+
+      // height: f32 (Offset 16)
+      view.setFloat32(itemOffset + 16, p.height, true);
+      // _padding2: f32 (Offset 20)
+      // _padding3: f32 (Offset 24)
+      // _padding4: f32 (Offset 28)
+
+      // color: vec3<f32> (Offset 32, 36, 40)
+      view.setFloat32(itemOffset + 32, p.color[0], true);
+      view.setFloat32(itemOffset + 36, p.color[1], true);
+      view.setFloat32(itemOffset + 40, p.color[2], true);
+      // _padding5: f32 (Offset 44)
+    }
+  }
+  offset += PYRAMID_SIZE * MAX_PYRAMIDS;
 
   // 5. SCENE HEADER (16 bytes total) - This is where the error occurred before
   view.setUint32(offset + 0, data.num_spheres, true);
   view.setUint32(offset + 4, data.num_boxes, true);
-  view.setUint32(offset + 8, data.num_plans, true);
+  //view.setUint32(offset + 8, data.num_plans, true);
+  view.setUint32(offset + 8, data.num_pyramids, true);
   view.setUint32(offset + 12, data.num_torus, true);
   offset += SCENE_HEADER_SIZE;
 
@@ -225,7 +254,7 @@ function addBox() {
   console.log(`✅ Added box ${sceneData.num_boxes - 1}`);
 }
 
-function addPlan() {
+/*function addPlan() {
   if (sceneData.num_plans >= MAX_PLANS) {
     alert(`Maximum ${MAX_PLANS} plans reached!`);
     return;
@@ -239,6 +268,22 @@ function addPlan() {
   updateScene();
   updateSceneUI();
   console.log(`✅ Added plan ${sceneData.num_plans - 1}`);
+}*/
+
+function addPyramid() {
+  if (sceneData.num_pyramids >= MAX_PYRAMIDS) {
+    alert(`Maximum ${MAX_PYRAMIDS} pyramids reached!`);
+    return;
+  }
+  sceneData.pyramids.push({
+    center: [0.0, 0.0, 0.0],
+    height: 1.0,
+    color: [Math.random(), Math.random(), Math.random()]
+  });
+  sceneData.num_pyramids++;
+  updateScene();
+  updateSceneUI();
+  console.log(`✅ Added pyramid ${sceneData.num_pyramids - 1}`);
 }
 
 function addTorus() {
@@ -277,13 +322,23 @@ function removeBox(index) {
   }
 }
 
-function removePlan(index) {
+/*function removePlan(index) {
   if (index >= 0 && index < sceneData.num_plans) {
     sceneData.plans.splice(index, 1);
     sceneData.num_plans--;
     updateScene();
     updateSceneUI();
     console.log(`Removed plan ${index}`);
+  }
+}*/
+
+function removePyramid(index) {
+  if (index >= 0 && index < sceneData.num_pyramids) {
+    sceneData.pyramids.splice(index, 1);
+    sceneData.num_pyramids--;
+    updateScene();
+    updateSceneUI();
+    console.log(`Removed pyramid ${index}`);
   }
 }
 
@@ -299,11 +354,13 @@ function removeTorus(index) {
 
 window.addSphere = addSphere;
 window.addBox = addBox;
-window.addPlan = addPlan;
+//window.addPlan = addPlan;
+window.addPyramid = addPyramid;
 window.addTorus = addTorus;
 window.removeSphere = removeSphere;
 window.removeBox = removeBox;
-window.removePlan = removePlan;
+window.removePyramid = removePyramid;
+//window.removePlan = removePlan;
 window.removeTorus = removeTorus;
 
 // --------------------------------------------
@@ -635,7 +692,7 @@ function updateSceneUI() {
 
 
   //plans
-  for (let i = 0; i < sceneData.num_plans; i++) {
+ /* for (let i = 0; i < sceneData.num_plans; i++) {
     const p = sceneData.plans[i];
     const hex = rgbToHex(p.color);
     parts.push(`<div class="flex items-center gap-2 p-2 bg-[#1d2021] rounded hover:bg-[#32302f] transition-colors row" data-type="plan" data-index="${i}">
@@ -643,7 +700,19 @@ function updateSceneUI() {
       <span class="text-xs flex-1">Plan ${i}</span>
       <button data-remove="plan-${i}" class="text-xs text-red-400 hover:text-red-300">✕</button>
     </div>`);
+  }*/
+
+  // pyramids
+  for (let i = 0; i < sceneData.num_pyramids; i++) {
+    const p = sceneData.pyramids[i];
+    const hex = rgbToHex(p.color);
+    parts.push(`<div class="flex items-center gap-2 p-2 bg-[#1d2021] rounded hover:bg-[#32302f] transition-colors row" data-type="pyramid" data-index="${i}">
+      <div class="w-3 h-3" style="background: ${hex}"></div>
+      <span class="text-xs flex-1">Pyramid ${i}</span>
+      <button data-remove="pyramid-${i}" class="text-xs text-red-400 hover:text-red-300">✕</button>
+    </div>`);
   }
+
 
   //torus
   for (let i = 0; i < sceneData.num_torus; i++) {
@@ -685,8 +754,11 @@ function updateSceneUI() {
         } else if (removeKey.startsWith('torus-')) {
           const i = Number(removeKey.split('-')[1]);
           removeTorus(i);
-        }else if (removeKey.startsWith('plan-')) removePlan(Number(removeKey.split('-')[1]));
-        selectObject('none', -1);
+        }else if (removeKey.startsWith('pyramid-')) {
+          const i = Number(removeKey.split('-')[1]);
+          removePyramid(i);
+        }//else if (removeKey.startsWith('plan-')) removePlan(Number(removeKey.split('-')[1]));
+        //selectObject('none', -1);
       };
     }
   });
@@ -696,7 +768,8 @@ function updateSceneUI() {
     if (sceneData.num_spheres > 0) selectObject('sphere', 0);
     else if (sceneData.num_boxes > 0) selectObject('box', 0);
     else if (sceneData.num_torus > 0) selectObject('torus', 0);
-    else if (sceneData.num_plans > 0) selectObject('plan', 0);
+    else if (sceneData.num_pyramids > 0) selectObject ('pyramid', 0);
+    //else if (sceneData.num_plans > 0) selectObject('plan', 0);
 
   }
 }
@@ -717,7 +790,7 @@ function selectObject(type, index) {
   const radiusSlider = $("slider-radius");
   const min_radSlier = $("slider-min_rad");
   const maj_radSlider = $("slider-maj_rad");
-  const distanceSlider = $("slider-dist");
+  //const distanceSlider = $("slider-dist");
   const longSlider   = $("slider-long");
   const widthSlider  = $("slider-width");
   const heightSlider = $("slider-height");
@@ -726,7 +799,7 @@ function selectObject(type, index) {
     if (radiusSlider) radiusSlider.style.display = 'flex';
     if (min_radSlier) min_radSlier.style.display = 'none';
     if (maj_radSlider) maj_radSlider.style.display = 'none';
-    if (distanceSlider) distanceSlider.style.display = 'none';
+    //if (distanceSlider) distanceSlider.style.display = 'none';
     if (longSlider) longSlider.style.display = 'none';
     if (widthSlider) widthSlider.style.display = 'none';
     if (heightSlider) heightSlider.style.display = 'none';
@@ -748,7 +821,7 @@ function selectObject(type, index) {
     if (radiusSlider) radiusSlider.style.display = 'none';
     if (min_radSlier) min_radSlier.style.display = 'none';
     if (maj_radSlider) maj_radSlider.style.display = 'none';
-    if (distanceSlider) distanceSlider.style.display = 'none';
+    //if (distanceSlider) distanceSlider.style.display = 'none';
     if (longSlider) longSlider.style.display = 'flex';
     if (widthSlider) widthSlider.style.display = 'flex';
     if (heightSlider) heightSlider.style.display = 'flex';
@@ -770,7 +843,31 @@ function selectObject(type, index) {
     $("val-height").textContent = Number(b.size[2]).toFixed(1);
     $("input-color").value = rgbToHex(b.color);
 
-  } else if (type === 'plan') {
+    } else if (type === 'pyramid') {
+    // Show only height slider for pyramids
+    if (radiusSlider) radiusSlider.style.display = 'none';
+    if (min_radSlier) min_radSlier.style.display = 'none';
+    if (maj_radSlider) maj_radSlider.style.display = 'none';
+    //if (distanceSlider) distanceSlider.style.display = 'none';
+    if (longSlider) longSlider.style.display = 'none';
+    if (widthSlider) widthSlider.style.display = 'none';
+    if (heightSlider) heightSlider.style.display = 'flex';
+
+    const p = sceneData.pyramids[index];
+    if (!p) { if (info) info.textContent = 'Editing: none'; return; }
+    if (info) info.textContent = `Editing: Pyramid [${index}]`;
+
+    $("input-pos-x").value = p.center[0];
+    $("val-pos-x").textContent = Number(p.center[0]).toFixed(1);
+    $("input-pos-y").value = p.center[1];
+    $("val-pos-y").textContent = Number(p.center[1]).toFixed(1);
+    $("input-pos-z").value = p.center[2];
+    $("val-pos-z").textContent = Number(p.center[2]).toFixed(1);
+    $("input-height").value = p.height;
+    $("val-height").textContent = Number(p.height).toFixed(1);
+    $("input-color").value = rgbToHex(p.color);
+
+  /*} else if (type === 'plan') {
 
     if (radiusSlider) radiusSlider.style.display = 'none';
     if (min_radSlier) min_radSlier.style.display = 'none';
@@ -791,14 +888,14 @@ function selectObject(type, index) {
     $("val-pos-z").textContent = Number(p.normal[2]).toFixed(1);
     $("input-dist").value = p.distance;
     $("val-dist").textContent = Number(p.distance).toFixed(1);
-    $("input-color").value = rgbToHex(p.color);
+    $("input-color").value = rgbToHex(p.color);*/
 
   } else if (type === 'torus') {
 
     radiusSlider.style.display = 'none';
     min_radSlier.style.display = 'flex';
     maj_radSlider.style.display = 'flex';
-    distanceSlider.style.display = 'none';
+    //distanceSlider.style.display = 'none';
     longSlider.style.display = 'none';
     widthSlider.style.display = 'none';
     heightSlider.style.display = 'none';
@@ -810,25 +907,20 @@ function selectObject(type, index) {
 
     $("input-pos-x").value = t.center[0];
     $("val-pos-x").textContent = Number(t.center[0]).toFixed(1);
-
     $("input-pos-y").value = t.center[1];
     $("val-pos-y").textContent = Number(t.center[1]).toFixed(1);
-
     $("input-pos-z").value = t.center[2];
     $("val-pos-z").textContent = Number(t.center[2]).toFixed(1);
-
     $("input-min_rad").value = t.minor_radius;
     $("val-min_rad").textContent = Number(t.minor_radius).toFixed(1);
-
     $("input-maj_rad").value = t.major_radius;
     $("val-maj_rad").textContent = Number(t.major_radius).toFixed(1);
-
     $("input-color").value = rgbToHex(t.color);
 
   } else {
     // fallback
     if (radiusSlider) radiusSlider.style.display = 'flex';
-    if (distanceSlider) distanceSlider.style.display = 'flex';
+    //if (distanceSlider) distanceSlider.style.display = 'flex';
     if (longSlider) longSlider.style.display = 'flex';
     if (widthSlider) widthSlider.style.display = 'flex';
     if (heightSlider) heightSlider.style.display = 'flex';
@@ -853,7 +945,7 @@ window.selectObject = selectObject;
   const ilong = $("input-long");
   const iwidth = $("input-width");
   const iheight = $("input-height");
-  const idist = $("input-dist");
+  //const idist = $("input-dist");
   const imajrad = $("input-maj_rad");
   const iminrad = $("input-min_rad");
   const ic = $("input-color");
@@ -866,7 +958,7 @@ window.selectObject = selectObject;
   const vlong = $("val-long");
   const vwidth = $("val-width");
   const vheight = $("val-height");
-  const vdist = $("val-dist");
+  //const vdist = $("val-dist");
 
   if (!ipx || !ipy || !ipz || !ilong || !iwidth || !iheight || !ic ||
     !vpx || !vpy || !vpz || !vlong || !vwidth || !vheight) return;
@@ -888,9 +980,12 @@ window.selectObject = selectObject;
     } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
       sceneData.torus[selected.index].center[0] = parseFloat(ipx.value); // CHANGED to .normal[0]
       writeAndRefresh();
-    } else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
-      sceneData.plans[selected.index].normal[0] = parseFloat(ipx.value); // CHANGED to .normal[0]
+    } else if (selected.type === 'pyramid' && sceneData.pyramids[selected.index]) {
+      sceneData.pyramids[selected.index].center[0] = parseFloat(ipx.value);
       writeAndRefresh();
+      /*else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+      sceneData.plans[selected.index].normal[0] = parseFloat(ipx.value); // CHANGED to .normal[0]
+      writeAndRefresh();*/
     }
   };
 
@@ -906,11 +1001,16 @@ window.selectObject = selectObject;
     } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
       sceneData.torus[selected.index].center[1] = invertedY;
       writeAndRefresh();
-
-    }else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
-      sceneData.plans[selected.index].normal[1] = invertedY; // CHANGED to .normal[1]
+    } else if (selected.type === 'pyramid' && sceneData.pyramids[selected.index]) {
+      sceneData.pyramids[selected.index].center[1] = invertedY;
       writeAndRefresh();
     }
+
+    /*}
+    else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+      sceneData.plans[selected.index].normal[1] = invertedY; // CHANGED to .normal[1]
+      writeAndRefresh();
+    }*/
   };
 
   ipz.oninput = () => {
@@ -925,10 +1025,14 @@ window.selectObject = selectObject;
     } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
       sceneData.torus[selected.index].center[2] = invertedZ;
       writeAndRefresh();
-    } else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
-      sceneData.plans[selected.index].normal[2] = invertedZ;
+    } else if (selected.type === 'pyramid' && sceneData.pyramids[selected.index]) {
+      sceneData.pyramids[selected.index].center[2] = invertedZ;
       writeAndRefresh();
     }
+     /*}else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+      sceneData.plans[selected.index].normal[2] = invertedZ;
+      writeAndRefresh();
+    }*/
    };
 
    if (irad && vrad) {
@@ -988,11 +1092,14 @@ window.selectObject = selectObject;
       if (selected.type === 'box' && sceneData.boxes[selected.index]) {
         sceneData.boxes[selected.index].size[2] = parseFloat(iheight.value);
         writeAndRefresh();
+      } else if (selected.type === 'pyramid' && sceneData.pyramids[selected.index]) {
+        sceneData.pyramids[selected.index].height = parseFloat(iheight.value);
+        writeAndRefresh();
       }
     };
   }
 
-  if (idist && vdist) {
+  /*if (idist && vdist) {
     idist.oninput = () => {
       vdist.textContent = Number(idist.value).toFixed(1);
       if (selected.type === 'plan' && sceneData.plans[selected.index]) {
@@ -1000,7 +1107,7 @@ window.selectObject = selectObject;
         writeAndRefresh();
       }
     };
-  }
+  }*/
 
   if (ic) {
     ic.oninput = () => {
@@ -1011,13 +1118,16 @@ window.selectObject = selectObject;
       } else if (selected.type === 'box' && sceneData.boxes[selected.index]) {
         sceneData.boxes[selected.index].color = c;
         writeAndRefresh();
-      } else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
+      /*} else if (selected.type === 'plan' && sceneData.plans[selected.index]) {
         sceneData.plans[selected.index].color = c;
-        writeAndRefresh();
+        writeAndRefresh();*/
       } else if (selected.type === 'torus' && sceneData.torus[selected.index]) {
         sceneData.torus[selected.index].color = c;
         writeAndRefresh();
 
+      } else if (selected.type === 'pyramid' && sceneData.pyramids[selected.index]) {
+        sceneData.pyramids[selected.index].color = c;
+        writeAndRefresh();
       }
     };
   }
